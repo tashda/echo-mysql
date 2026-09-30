@@ -19,14 +19,13 @@ public actor MySQLWireConnection: MySQLConnectionSession {
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         do {
             let address = try SocketAddress.makeAddressResolvingHost(configuration.host, port: configuration.port)
-            let tlsConfiguration = configuration.useTLS ? TLSConfiguration.makeClientConfiguration() : nil
             let connection = try await MySQLConnection.connect(
                 to: address,
                 username: configuration.username,
                 database: configuration.database ?? "",
                 password: configuration.password,
-                tlsConfiguration: tlsConfiguration,
-                serverHostname: configuration.useTLS ? configuration.host : nil,
+                tlsConfiguration: Self.tlsConfiguration(for: configuration.tlsMode),
+                serverHostname: Self.serverName(for: configuration),
                 logger: logger,
                 on: eventLoopGroup.any()
             ).get()
@@ -136,5 +135,31 @@ public actor MySQLWireConnection: MySQLConnectionSession {
             throw MySQLWireError.connectionAlreadyClosed
         }
         return connection
+    }
+
+    /// NIOSSL settings for a TLS mode; nil when TLS is disabled.
+    static func tlsConfiguration(for mode: MySQLWireTLSMode) -> TLSConfiguration? {
+        var tls = TLSConfiguration.makeClientConfiguration()
+        switch mode {
+        case .disabled:
+            return nil
+        case .required:
+            tls.certificateVerification = .none
+        case .verifyCA(let path):
+            tls.certificateVerification = .noHostnameVerification
+            tls.trustRoots = .file(path)
+        case .verifyIdentity(let path):
+            tls.certificateVerification = .fullVerification
+            if let path { tls.trustRoots = .file(path) }
+        }
+        return tls
+    }
+
+    /// The name sent as SNI and checked against the certificate. An IP address cannot be sent as
+    /// SNI (NIOSSL refuses it); the certificate's IP entries are checked without it.
+    static func serverName(for configuration: MySQLWireConfiguration) -> String? {
+        guard configuration.useTLS else { return nil }
+        let isAddress = (try? SocketAddress(ipAddress: configuration.host, port: 0)) != nil
+        return isAddress ? nil : configuration.host
     }
 }
