@@ -1,4 +1,3 @@
-import MySQLWire
 
 public struct MySQLErrorLogClient: Sendable {
     let serverConnection: MySQLServerConnection

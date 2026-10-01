@@ -1,5 +1,4 @@
 import Foundation
-import MySQLWire
 
 public extension MySQLSecurityClient {
     func accountLimits(for username: String, host: String) async throws -> MySQLAccountLimits? {

@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLSessionClient {
     func acquireNamedLock(_ name: String, timeoutSeconds: Int = 0) async throws -> MySQLNamedLockResult {

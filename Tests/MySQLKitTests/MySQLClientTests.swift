@@ -1,6 +1,4 @@
 import Logging
-import MySQLWire
-import NIOCore
 import Testing
 @testable import MySQLKit
 
@@ -34,11 +32,9 @@ actor MockConnectionSession: MySQLConnectionSession {
         return preparedQueryResults[sql, default: MySQLWireQueryResult(rows: [], metadata: nil)]
     }
 
-    func stream(_ sql: String) async throws -> AsyncThrowingStream<MySQLRow, Error> {
+    func stream(_ sql: String) async throws -> MySQLRowStream {
         simpleQueries.append(sql)
-        return AsyncThrowingStream { continuation in
-            continuation.finish()
-        }
+        return MySQLRowStream(rows: [])
     }
 
     func changeDatabase(_ database: String) async throws {
@@ -1676,43 +1672,6 @@ struct MySQLClientTests {
     }
 
     private static func textRow(_ values: [(String, String?)]) -> MySQLRow {
-        let columnDefinitions = values.map { name, _ in columnDefinition(named: name) }
-
-        let rowValues = values.map { _, value -> ByteBuffer? in
-            guard let value else { return nil }
-            var buffer = ByteBufferAllocator().buffer(capacity: value.utf8.count)
-            buffer.writeString(value)
-            return buffer
-        }
-
-        return MySQLRow(format: .text, columnDefinitions: columnDefinitions, values: rowValues)
-    }
-
-    private static func columnDefinition(named name: String) -> MySQLProtocol.ColumnDefinition41 {
-        var payload = ByteBufferAllocator().buffer(capacity: 64)
-        writeLengthEncodedString("def", into: &payload)
-        writeLengthEncodedString("test", into: &payload)
-        writeLengthEncodedString("test", into: &payload)
-        writeLengthEncodedString("test", into: &payload)
-        writeLengthEncodedString(name, into: &payload)
-        writeLengthEncodedString(name, into: &payload)
-        payload.writeInteger(UInt8(0x0c))
-        payload.writeInteger(MySQLProtocol.CharacterSet.utf8mb4.rawValue)
-        payload.writeInteger(UInt8(0))
-        payload.writeInteger(UInt32(255), endianness: .little)
-        payload.writeInteger(MySQLProtocol.DataType.varString.rawValue)
-        payload.writeInteger(UInt16(0), endianness: .little)
-        payload.writeInteger(UInt8(0))
-        payload.writeInteger(UInt16(0))
-
-        var packet = MySQLPacket(payload: payload)
-        return try! packet.decode(MySQLProtocol.ColumnDefinition41.self, capabilities: [])
-    }
-
-    private static func writeLengthEncodedString(_ value: String, into buffer: inout ByteBuffer) {
-        let utf8Count = value.utf8.count
-        precondition(utf8Count < 251)
-        buffer.writeInteger(UInt8(utf8Count))
-        buffer.writeString(value)
+        MySQLRow(textColumns: values.map { (name: $0.0, value: $0.1) })
     }
 }

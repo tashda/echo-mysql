@@ -1,5 +1,4 @@
 import Foundation
-import MySQLWire
 
 public extension MySQLSessionClient {
     func currentUser() async throws -> String? {

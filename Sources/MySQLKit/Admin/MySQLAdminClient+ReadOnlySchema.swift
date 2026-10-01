@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLAdminClient {
     /// Makes a schema read-only for everyone, root included (`ALTER SCHEMA … READ ONLY`, MySQL

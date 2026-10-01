@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLMetadataClient {
     /// Returns size, charset, and collation info for a database schema.

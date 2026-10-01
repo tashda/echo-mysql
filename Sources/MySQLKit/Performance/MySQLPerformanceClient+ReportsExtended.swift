@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLPerformanceClient {
     func topRuntimeStatements(limit: Int = 10) async throws -> MySQLPerformanceReport {

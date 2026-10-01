@@ -1,5 +1,4 @@
 import Foundation
-import MySQLWire
 
 /// Statements with bound parameters, through MySQL's binary protocol (COM_STMT_PREPARE and
 /// COM_STMT_EXECUTE): the server receives the values typed and separate from the SQL, so nothing

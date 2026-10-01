@@ -197,16 +197,16 @@ struct DataTests {
             #expect(text.column("t")?.string == "-838:59:59")
             #expect(text.column("y")?.string == "2155")
             #expect(text.column("txt")?.string?.count == 100_000)
-            #expect(text.column("bin")?.buffer?.readableBytesView.map { $0 } == [0x00, 0xFF, 0x10])
+            #expect(text.column("bin")?.data.map { Array($0) } == [0x00, 0xFF, 0x10])
             #expect(text.column("e")?.string == "large")
             #expect(text.column("s")?.string == "a,c")
 
             // The same row through the binary protocol (a statement with binds).
             let binary = try #require(try await client.query("SELECT * FROM `\(schema)`.types WHERE tiny = ?", binds: [MySQLData(int: -128)]).rows.first)
             #expect(binary.column("big_signed")?.int == Int.min)
-            withKnownIssue("mysql-nio's MySQLData.string is nil for binary DECIMAL and temporal values") {
-                #expect(binary.column("dec")?.string == "12345678901234567890123456789012345.123456789012345678901234567890")
-            }
+            // Exact through binds too (mysql-nio gave nil for binary DECIMAL and temporal values).
+            #expect(binary.column("dec")?.string == "12345678901234567890123456789012345.123456789012345678901234567890")
+            #expect(binary.column("dt")?.string == "2024-02-29 23:59:59.123456")
             #expect(binary.column("dbl")?.double == 1.5e300)
             #expect(binary.column("e")?.string == "large")
         }
@@ -217,12 +217,10 @@ struct DataTests {
         try await server.withSchema { client, schema in
             try await client.admin.createTable(schema: schema, name: "blobs", columns: [MySQLColumnDefinition(name: "b", dataType: "LONGBLOB")])
             let bytes = (0..<2_000_000).map { UInt8(truncatingIfNeeded: $0 &* 31) }
-            var buffer = ByteBufferAllocator().buffer(capacity: bytes.count)
-            buffer.writeBytes(bytes)
-            _ = try await client.query("INSERT INTO `\(schema)`.blobs VALUES (?)", binds: [MySQLData(type: .blob, buffer: buffer)])
+            _ = try await client.query("INSERT INTO `\(schema)`.blobs VALUES (?)", binds: [MySQLData(data: Data(bytes))])
             let back = try await client.simpleQuery("SELECT b, LENGTH(b) AS n FROM `\(schema)`.blobs").first
             #expect(back?.column("n")?.int == bytes.count)
-            #expect(back?.column("b")?.buffer?.readableBytesView.elementsEqual(bytes) == true)
+            #expect(back?.column("b")?.data.map { $0.elementsEqual(bytes) } == true)
         }
     }
 }

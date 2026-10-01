@@ -1,4 +1,3 @@
-import MySQLWire
 
 public struct MySQLIndexClient: Sendable {
     let serverConnection: MySQLServerConnection

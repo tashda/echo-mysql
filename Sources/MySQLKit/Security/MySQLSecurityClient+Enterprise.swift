@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLSecurityClient {
 

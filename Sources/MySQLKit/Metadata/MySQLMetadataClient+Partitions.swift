@@ -1,4 +1,3 @@
-import MySQLWire
 
 /// A partition of a partitioned table (`information_schema.PARTITIONS`).
 public struct MySQLPartitionInfo: Sendable, Hashable {

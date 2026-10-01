@@ -1,5 +1,4 @@
 import Logging
-import MySQLWire
 
 public actor MySQLServerConnection: Sendable {
     private let configuration: MySQLConfiguration
