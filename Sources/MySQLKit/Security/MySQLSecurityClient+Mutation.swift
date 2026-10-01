@@ -63,6 +63,14 @@ public extension MySQLSecurityClient {
         return MySQLUserMutationResult(username: username, host: host, operation: "DROP USER")
     }
 
+    /// Changes what TLS an account must log in with (`ALTER USER … REQUIRE …`).
+    @discardableResult
+    func alterUserTLS(username: String, host: String, tls: MySQLTLSRequirement) async throws -> MySQLUserMutationResult {
+        let clause = tls == .none ? " REQUIRE NONE" : tls.clause
+        try await executeSecurityStatement("ALTER USER '\(escapedLiteral(username))'@'\(escapedLiteral(host))'\(clause)")
+        return MySQLUserMutationResult(username: username, host: host, operation: "ALTER USER REQUIRE")
+    }
+
     func alterUserPassword(username: String, host: String, password: String) async throws -> MySQLUserMutationResult {
         try await executeSecurityStatement(
             "ALTER USER '\(escapedLiteral(username))'@'\(escapedLiteral(host))' IDENTIFIED BY '\(escapedLiteral(password))'"
