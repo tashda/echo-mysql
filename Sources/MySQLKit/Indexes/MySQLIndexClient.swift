@@ -17,7 +17,7 @@ public struct MySQLIndexClient: Sendable {
             lookupSQL,
             binds: [MySQLData(string: schema), MySQLData(string: name)]
         )
-        guard let tableName = result.rows.first?.column("TABLE_NAME")?.string else {
+        guard let tableName = result.rows.first?.field("TABLE_NAME")?.string else {
             throw MySQLIndexError.indexNotFound(name: name, schema: schema)
         }
 

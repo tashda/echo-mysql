@@ -15,8 +15,8 @@ public extension MySQLSecurityClient {
         let result = try await connection.query(sql, binds: [])
         return result.rows.compactMap { row in
             guard
-                let roleName = row.column("FROM_USER")?.string,
-                let roleHost = row.column("FROM_HOST")?.string
+                let roleName = row.field("FROM_USER")?.string,
+                let roleHost = row.field("FROM_HOST")?.string
             else { return nil }
 
             return MySQLRoleDefinition(name: roleName, host: roleHost)
@@ -38,10 +38,10 @@ public extension MySQLSecurityClient {
         let result = try await connection.query(sql, binds: [])
         return result.rows.compactMap { row in
             guard
-                let roleName = row.column("FROM_USER")?.string,
-                let roleHost = row.column("FROM_HOST")?.string,
-                let toUser = row.column("TO_USER")?.string,
-                let toHost = row.column("TO_HOST")?.string
+                let roleName = row.field("FROM_USER")?.string,
+                let roleHost = row.field("FROM_HOST")?.string,
+                let toUser = row.field("TO_USER")?.string,
+                let toHost = row.field("TO_HOST")?.string
             else { return nil }
 
             return MySQLRoleAssignment(

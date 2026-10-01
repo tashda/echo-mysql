@@ -17,8 +17,8 @@ public extension MySQLSecurityClient {
         let result = try await connection.query(sql, binds: [])
         return result.rows.compactMap { row in
             guard
-                let username = row.column("User")?.string,
-                let host = row.column("Host")?.string
+                let username = row.field("User")?.string,
+                let host = row.field("Host")?.string
             else {
                 return nil
             }
@@ -26,9 +26,9 @@ public extension MySQLSecurityClient {
             return MySQLUserAccount(
                 username: username,
                 host: host,
-                authenticationPlugin: row.column("plugin")?.string,
-                accountLocked: row.column("account_locked")?.string?.uppercased() == "Y",
-                passwordExpired: row.column("password_expired")?.string?.uppercased() == "Y"
+                authenticationPlugin: row.field("plugin")?.string,
+                accountLocked: row.field("account_locked")?.string?.uppercased() == "Y",
+                passwordExpired: row.field("password_expired")?.string?.uppercased() == "Y"
             )
         }
     }

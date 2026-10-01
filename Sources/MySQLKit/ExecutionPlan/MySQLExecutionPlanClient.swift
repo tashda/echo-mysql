@@ -17,7 +17,7 @@ public struct MySQLExecutionPlanClient: Sendable {
     public func explainJSON(_ sql: String) async throws -> MySQLExplainJSONPlan {
         let connection = try await serverConnection.primary()
         let rows = try await connection.simpleQuery("EXPLAIN FORMAT=JSON \(sql)")
-        let json = rows.first?.column("EXPLAIN")?.string ?? "{}"
+        let json = rows.first?.field("EXPLAIN")?.string ?? "{}"
         return MySQLExplainJSONPlan(json: json)
     }
 

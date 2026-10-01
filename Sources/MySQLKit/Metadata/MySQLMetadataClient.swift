@@ -14,7 +14,7 @@ public struct MySQLMetadataClient: Sendable {
         let connection = try await serverConnection.metadata()
         let rows = try await connection.simpleQuery("SHOW DATABASES")
         return rows.compactMap { row in
-            row.column("Database")?.string
+            row.field("Database")?.string
         }
         .filter { includeSystem || !Self.systemDatabases.contains($0.lowercased()) }
     }

@@ -21,11 +21,11 @@ public extension MySQLMetadataClient {
         let result = try await connection.query(sql, binds: [MySQLData(string: schemaName)])
         return result.rows.compactMap { row in
             guard
-                let schema = row.column("trigger_schema")?.string,
-                let name = row.column("trigger_name")?.string,
-                let table = row.column("event_object_table")?.string,
-                let timing = row.column("action_timing")?.string,
-                let event = row.column("event_manipulation")?.string
+                let schema = row.field("trigger_schema")?.string,
+                let name = row.field("trigger_name")?.string,
+                let table = row.field("event_object_table")?.string,
+                let timing = row.field("action_timing")?.string,
+                let event = row.field("event_manipulation")?.string
             else { return nil }
 
             return MySQLTriggerInfo(
@@ -34,7 +34,7 @@ public extension MySQLMetadataClient {
                 table: table,
                 timing: timing,
                 event: event,
-                statement: row.column("action_statement")?.string
+                statement: row.field("action_statement")?.string
             )
         }
     }

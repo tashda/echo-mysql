@@ -24,10 +24,10 @@ public extension MySQLSecurityClient {
         }
 
         return MySQLAccountLimits(
-            maxQueriesPerHour: row.column("max_questions")?.string.flatMap(Int.init) ?? 0,
-            maxUpdatesPerHour: row.column("max_updates")?.string.flatMap(Int.init) ?? 0,
-            maxConnectionsPerHour: row.column("max_connections")?.string.flatMap(Int.init) ?? 0,
-            maxUserConnections: row.column("max_user_connections")?.string.flatMap(Int.init) ?? 0
+            maxQueriesPerHour: row.field("max_questions")?.string.flatMap(Int.init) ?? 0,
+            maxUpdatesPerHour: row.field("max_updates")?.string.flatMap(Int.init) ?? 0,
+            maxConnectionsPerHour: row.field("max_connections")?.string.flatMap(Int.init) ?? 0,
+            maxUserConnections: row.field("max_user_connections")?.string.flatMap(Int.init) ?? 0
         )
     }
 

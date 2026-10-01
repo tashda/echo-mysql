@@ -34,9 +34,9 @@ public extension MySQLSecurityClient {
         let result = try await connection.query(sql, binds: binds)
         return result.rows.compactMap { row in
             guard
-                let grantee = row.column("grantee")?.string,
-                let tableSchema = row.column("table_schema")?.string,
-                let privilegeType = row.column("privilege_type")?.string
+                let grantee = row.field("grantee")?.string,
+                let tableSchema = row.field("table_schema")?.string,
+                let privilegeType = row.field("privilege_type")?.string
             else {
                 return nil
             }
@@ -46,7 +46,7 @@ public extension MySQLSecurityClient {
                 tableSchema: tableSchema,
                 tableName: nil,
                 privilegeType: privilegeType,
-                isGrantable: row.column("is_grantable")?.string?.uppercased() == "YES"
+                isGrantable: row.field("is_grantable")?.string?.uppercased() == "YES"
             )
         }
     }
@@ -86,16 +86,16 @@ public extension MySQLSecurityClient {
         let result = try await connection.query(sql, binds: binds)
         return result.rows.compactMap { row in
             guard
-                let grantee = row.column("grantee")?.string,
-                let privilegeType = row.column("privilege_type")?.string
+                let grantee = row.field("grantee")?.string,
+                let privilegeType = row.field("privilege_type")?.string
             else { return nil }
 
             return MySQLPrivilegeGrant(
                 grantee: grantee,
-                tableSchema: row.column("table_schema")?.string,
-                tableName: row.column("table_name")?.string,
+                tableSchema: row.field("table_schema")?.string,
+                tableName: row.field("table_name")?.string,
                 privilegeType: privilegeType,
-                isGrantable: row.column("is_grantable")?.string?.uppercased() == "YES"
+                isGrantable: row.field("is_grantable")?.string?.uppercased() == "YES"
             )
         }
     }

@@ -37,9 +37,9 @@ public extension MySQLMetadataClient {
         let result = try await connection.query(sql, binds: binds)
         return result.rows.compactMap { row in
             guard
-                let schema = row.column("object_schema")?.string,
-                let name = row.column("object_name")?.string,
-                let kind = row.column("object_type")?.string
+                let schema = row.field("object_schema")?.string,
+                let name = row.field("object_name")?.string,
+                let kind = row.field("object_type")?.string
             else { return nil }
 
             return MySQLMetadataSearchResult(schema: schema, name: name, kind: kind)

@@ -5,7 +5,7 @@ public extension MySQLSessionClient {
     func currentUser() async throws -> String? {
         let connection = try await serverConnection.primary()
         let rows = try await connection.simpleQuery("SELECT CURRENT_USER() AS current_user")
-        return rows.first?.column("current_user")?.string
+        return rows.first?.field("current_user")?.string
     }
 
     func currentDatabase() async throws -> String? {
@@ -20,8 +20,8 @@ public extension MySQLSessionClient {
 
         return rows.compactMap { row -> MySQLSessionVariable? in
             guard
-                let name = row.column("Variable_name")?.string,
-                let value = row.column("Value")?.string
+                let name = row.field("Variable_name")?.string,
+                let value = row.field("Value")?.string
             else {
                 return nil
             }
@@ -56,7 +56,7 @@ public extension MySQLSessionClient {
         let rows = try await connection.simpleQuery(
             "SELECT @@SESSION.transaction_isolation AS transaction_isolation"
         )
-        guard let rawLevel = rows.first?.column("transaction_isolation")?.string else {
+        guard let rawLevel = rows.first?.field("transaction_isolation")?.string else {
             return nil
         }
         return MySQLTransactionIsolationLevel(rawValue: rawLevel.uppercased())

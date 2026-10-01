@@ -19,8 +19,8 @@ public extension MySQLMetadataClient {
         let result = try await connection.query(sql, binds: [MySQLData(string: schemaName)])
         return result.rows.compactMap { row in
             guard
-                let name = row.column("table_name")?.string,
-                let tableType = row.column("table_type")?.string,
+                let name = row.field("table_name")?.string,
+                let tableType = row.field("table_type")?.string,
                 let kind = MySQLSchemaObjectKind(tableType: tableType)
             else {
                 return nil

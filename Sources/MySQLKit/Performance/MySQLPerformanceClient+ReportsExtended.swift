@@ -24,7 +24,7 @@ public extension MySQLPerformanceClient {
     func innodbStatus() async throws -> MySQLInnoDBStatus {
         let connection = try await serverConnection.activity()
         let rows = try await connection.simpleQuery("SHOW ENGINE INNODB STATUS")
-        let status = rows.first?.column("Status")?.string ?? ""
+        let status = rows.first?.field("Status")?.string ?? ""
         return MySQLInnoDBStatus(statusText: status)
     }
 

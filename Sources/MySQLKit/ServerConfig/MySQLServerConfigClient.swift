@@ -19,8 +19,8 @@ public struct MySQLServerConfigClient: Sendable {
         let result = try await connection.query(sql, binds: binds)
         return result.rows.compactMap { row in
             guard
-                let name = row.column("Variable_name")?.string,
-                let value = row.column("Value")?.string
+                let name = row.field("Variable_name")?.string,
+                let value = row.field("Value")?.string
             else {
                 return nil
             }
@@ -44,8 +44,8 @@ public struct MySQLServerConfigClient: Sendable {
         let result = try await connection.query(sql, binds: binds)
         return result.rows.compactMap { row in
             guard
-                let name = row.column("Variable_name")?.string,
-                let value = row.column("Value")?.string
+                let name = row.field("Variable_name")?.string,
+                let value = row.field("Value")?.string
             else {
                 return nil
             }

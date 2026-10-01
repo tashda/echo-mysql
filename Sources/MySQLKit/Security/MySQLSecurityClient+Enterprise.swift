@@ -36,8 +36,8 @@ public extension MySQLSecurityClient {
         let result = try await connection.query(sql, binds: names.map { MySQLData(string: $0) })
         return result.rows.compactMap { row in
             guard
-                let name = row.column("Variable_name")?.string,
-                let value = row.column("Value")?.string
+                let name = row.field("Variable_name")?.string,
+                let value = row.field("Value")?.string
             else { return nil }
             return MySQLGlobalVariable(name: name, value: value)
         }
@@ -53,7 +53,7 @@ public extension MySQLSecurityClient {
         """
         let connection = try await serverConnection.activity()
         let result = try await connection.query(sql, binds: [])
-        let count = result.rows.first?.column("cnt")?.string.flatMap(Int.init) ?? 0
+        let count = result.rows.first?.field("cnt")?.string.flatMap(Int.init) ?? 0
         return count > 0
     }
 
@@ -70,15 +70,15 @@ public extension MySQLSecurityClient {
         let result = try await connection.query(sql, binds: [MySQLData(int: limit)])
         return result.rows.compactMap { row in
             guard
-                let schema = row.column("TABLE_SCHEMA")?.string,
-                let table = row.column("TABLE_NAME")?.string,
-                let column = row.column("COLUMN_NAME")?.string
+                let schema = row.field("TABLE_SCHEMA")?.string,
+                let table = row.field("TABLE_NAME")?.string,
+                let column = row.field("COLUMN_NAME")?.string
             else { return nil }
             return MySQLMaskingRule(
                 schema: schema,
                 table: table,
                 column: column,
-                function: row.column("mask_function")?.string ?? "MASK"
+                function: row.field("mask_function")?.string ?? "MASK"
             )
         }
     }
@@ -118,8 +118,8 @@ public extension MySQLSecurityClient {
         let result = try await connection.query(sql, binds: names.map { MySQLData(string: $0) })
         return result.rows.compactMap { row in
             guard
-                let name = row.column("Variable_name")?.string,
-                let value = row.column("Value")?.string
+                let name = row.field("Variable_name")?.string,
+                let value = row.field("Value")?.string
             else { return nil }
             return MySQLGlobalVariable(name: name, value: value)
         }
@@ -138,13 +138,13 @@ public extension MySQLSecurityClient {
         let result = try await connection.query(sql, binds: [MySQLData(int: limit)])
         return result.rows.compactMap { row in
             guard
-                let schema = row.column("TABLE_SCHEMA")?.string,
-                let table = row.column("TABLE_NAME")?.string
+                let schema = row.field("TABLE_SCHEMA")?.string,
+                let table = row.field("TABLE_NAME")?.string
             else { return nil }
             return MySQLEncryptedTable(
                 schema: schema,
                 table: table,
-                createOptions: row.column("CREATE_OPTIONS")?.string
+                createOptions: row.field("CREATE_OPTIONS")?.string
             )
         }
     }
@@ -191,10 +191,10 @@ public extension MySQLSecurityClient {
         let rows = try await connection.simpleQuery(sql)
         return rows.compactMap { row in
             MySQLGeneralLogEntry(
-                eventTime: row.column("event_time")?.string,
-                userHost: row.column("user_host")?.string,
-                commandType: row.column("command_type")?.string,
-                argument: row.column("argument")?.string
+                eventTime: row.field("event_time")?.string,
+                userHost: row.field("user_host")?.string,
+                commandType: row.field("command_type")?.string,
+                argument: row.field("argument")?.string
             )
         }
     }
@@ -223,11 +223,11 @@ public extension MySQLSecurityClient {
         let connection = try await serverConnection.activity()
         let rows = try await connection.simpleQuery(sql)
         return rows.compactMap { row in
-            guard let userhost = row.column("USERHOST")?.string else { return nil }
+            guard let userhost = row.field("USERHOST")?.string else { return nil }
             return MySQLFirewallRule(
                 userhost: userhost,
-                rule: row.column("RULE")?.string ?? "",
-                mode: row.column("MODE")?.string ?? ""
+                rule: row.field("RULE")?.string ?? "",
+                mode: row.field("MODE")?.string ?? ""
             )
         }
     }

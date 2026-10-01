@@ -34,15 +34,15 @@ public extension MySQLMetadataClient {
         }
 
         return MySQLTableOptionsInfo(
-            engine: row.column("engine")?.string,
-            characterSet: row.column("character_set_name")?.string,
-            collation: row.column("table_collation")?.string,
-            autoIncrement: row.column("auto_increment")?.string.flatMap(Int.init),
-            rowFormat: row.column("row_format")?.string,
-            comment: row.column("table_comment")?.string?.nilIfEmpty,
-            estimatedRowCount: row.column("table_rows")?.string.flatMap(Int64.init),
-            dataLength: row.column("data_length")?.string.flatMap(Int64.init),
-            indexLength: row.column("index_length")?.string.flatMap(Int64.init)
+            engine: row.field("engine")?.string,
+            characterSet: row.field("character_set_name")?.string,
+            collation: row.field("table_collation")?.string,
+            autoIncrement: row.field("auto_increment")?.string.flatMap(Int.init),
+            rowFormat: row.field("row_format")?.string,
+            comment: row.field("table_comment")?.string?.nilIfEmpty,
+            estimatedRowCount: row.field("table_rows")?.string.flatMap(Int64.init),
+            dataLength: row.field("data_length")?.string.flatMap(Int64.init),
+            indexLength: row.field("index_length")?.string.flatMap(Int64.init)
         )
     }
 }

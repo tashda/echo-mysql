@@ -8,6 +8,6 @@ public extension MySQLMetadataClient {
         let rows = try await connection.simpleQuery(
             "SELECT COUNT(*) AS row_count FROM `\(Self.escapedIdentifier(schema))`.`\(Self.escapedIdentifier(table))`"
         )
-        return rows.first?.column("row_count")?.int ?? 0
+        return rows.first?.field("row_count")?.int ?? 0
     }
 }

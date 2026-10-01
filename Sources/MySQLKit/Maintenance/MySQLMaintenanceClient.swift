@@ -34,7 +34,7 @@ public struct MySQLMaintenanceClient: Sendable {
         let connection = try await serverConnection.primary()
         let rows = try await connection.simpleQuery("CHECK TABLE \(qualified)")
         let messages = rows.compactMap { row in
-            row.column("Msg_text")?.string ?? row.column("msg_text")?.string
+            row.field("Msg_text")?.string ?? row.field("msg_text")?.string
         }
         return MySQLMaintenanceResult(operation: "CHECK TABLE", messages: messages)
     }
@@ -44,7 +44,7 @@ public struct MySQLMaintenanceClient: Sendable {
         let sql = "REPAIR TABLE `\(escapedIdentifier(schema))`.`\(escapedIdentifier(table))`"
         let rows = try await connection.simpleQuery(sql)
         let messages = rows.compactMap { row in
-            row.column("Msg_text")?.string ?? row.column("msg_text")?.string
+            row.field("Msg_text")?.string ?? row.field("msg_text")?.string
         }
         return MySQLMaintenanceResult(operation: "REPAIR TABLE", messages: messages)
     }
@@ -58,7 +58,7 @@ public struct MySQLMaintenanceClient: Sendable {
         let connection = try await serverConnection.primary()
         let rows = try await connection.simpleQuery(sql)
         let messages = rows.compactMap { row in
-            row.column("Msg_text")?.string ?? row.column("msg_text")?.string
+            row.field("Msg_text")?.string ?? row.field("msg_text")?.string
         }
         return MySQLMaintenanceResult(operation: operation, messages: messages)
     }

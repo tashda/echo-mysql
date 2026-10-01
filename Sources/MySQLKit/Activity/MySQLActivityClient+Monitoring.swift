@@ -7,19 +7,19 @@ public extension MySQLActivityClient {
         let result = try await connection.query("SHOW FULL PROCESSLIST", binds: [])
         return result.rows.compactMap { row in
             guard
-                let idString = row.column("Id")?.string,
+                let idString = row.field("Id")?.string,
                 let id = UInt32(idString),
-                let user = row.column("User")?.string,
-                let command = row.column("Command")?.string
+                let user = row.field("User")?.string,
+                let command = row.field("Command")?.string
             else {
                 return nil
             }
 
-            let host = row.column("Host")?.string
-            let database = row.column("db")?.string
-            let timeSeconds = row.column("Time")?.string.flatMap(Int.init) ?? 0
-            let state = row.column("State")?.string
-            let info = row.column("Info")?.string
+            let host = row.field("Host")?.string
+            let database = row.field("db")?.string
+            let timeSeconds = row.field("Time")?.string.flatMap(Int.init) ?? 0
+            let state = row.field("State")?.string
+            let info = row.field("Info")?.string
 
             return MySQLProcess(
                 id: id,
