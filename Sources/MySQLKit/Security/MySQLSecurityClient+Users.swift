@@ -2,16 +2,7 @@ import MySQLWire
 
 public extension MySQLSecurityClient {
     func listUsers() async throws -> [MySQLUserAccount] {
-        let sql = """
-        SELECT
-            User,
-            Host,
-            plugin,
-            account_locked,
-            password_expired
-        FROM mysql.user
-        ORDER BY User, Host;
-        """
+        let sql = try await isMariaDB() ? Self.mariaDBUsersSQL : Self.mysqlUsersSQL
 
         let connection = try await serverConnection.metadata()
         let result = try await connection.query(sql, binds: [])
@@ -32,6 +23,23 @@ public extension MySQLSecurityClient {
             )
         }
     }
+
+    internal static let mysqlUsersSQL = """
+        SELECT User, Host, plugin, account_locked, password_expired
+        FROM mysql.user
+        ORDER BY User, Host;
+        """
+
+    /// MariaDB 10.4+ keeps accounts in mysql.global_priv as JSON; its mysql.user view has no
+    /// account_locked column.
+    internal static let mariaDBUsersSQL = """
+        SELECT User, Host,
+            JSON_VALUE(Priv, '$.plugin') AS plugin,
+            IF(JSON_VALUE(Priv, '$.account_locked') = 'true', 'Y', 'N') AS account_locked,
+            IF(JSON_VALUE(Priv, '$.password_last_changed') = '0', 'Y', 'N') AS password_expired
+        FROM mysql.global_priv
+        ORDER BY User, Host;
+        """
 
     func showGrants(for username: String, host: String) async throws -> [String] {
         let escapedUser = username.replacingOccurrences(of: "'", with: "''")
