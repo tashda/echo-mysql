@@ -25,6 +25,19 @@ public extension MySQLClient {
         await serverConnection.closePrimary()
     }
 
+    /// Checks, without a round trip, whether the server or the network closed the primary
+    /// connection; reported once. After a loss with a transaction open, calls fail with
+    /// ``MySQLWireError/transactionLost`` until ``reconnect()``.
+    func checkConnection() async -> MySQLConnectionLoss? {
+        await serverConnection.checkPrimary()
+    }
+
+    /// Opens a new primary connection after a lost transaction. Session settings, temporary
+    /// tables and the transaction are gone.
+    func reconnect() async throws {
+        try await serverConnection.reconnectPrimary()
+    }
+
     /// Whether a transaction is open on the primary connection (as of its last statement); never
     /// opens a connection.
     var isInTransaction: Bool {

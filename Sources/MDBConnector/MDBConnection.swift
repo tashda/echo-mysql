@@ -24,6 +24,8 @@ public actor MDBConnection {
     var currentFields: [MDBField] = []
     /// Where reading the results of the statement(s) sent stands.
     var phase: Phase = .idle
+    /// Whether a transaction was open when the connection closed (the server rolls it back).
+    public private(set) var closedWithTransactionOpen = false
 
     public nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
 
@@ -96,7 +98,10 @@ public actor MDBConnection {
         for wait in waits { await wait.abort(with: MDBError(.connectionLost, message: "The connection was closed.")) }
         if let result { mysql_free_result(result) }
         result = nil
-        if let handle { mysql_close(handle) }
+        if let handle {
+            if isInTransaction { closedWithTransactionOpen = true }
+            mysql_close(handle)
+        }
         handle = nil
         isBusy = false
         phase = .idle

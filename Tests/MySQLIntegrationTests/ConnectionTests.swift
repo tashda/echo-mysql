@@ -171,6 +171,38 @@ struct ConnectionTests {
         }
     }
 
+    /// Lost with a transaction open: reported once, and calls fail until `reconnect()`, so no
+    /// statement silently runs outside the transaction the user thinks is open.
+    @Test func aConnectionLostInATransactionWaitsForReconnect() async throws {
+        let server = try TestServer.require()
+        try await server.withClient { client in
+            #expect(await client.checkConnection() == nil)
+            _ = try await client.simpleQuery("START TRANSACTION")
+            let id = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            try await server.withClient { admin in _ = try await admin.simpleQuery("KILL CONNECTION \(id)") }
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(await client.checkConnection() == MySQLConnectionLoss(transactionLost: true))
+            #expect(await client.checkConnection() == nil)
+            await #expect(throws: MySQLWireError.self) { _ = try await client.simpleQuery("SELECT 1") }
+            try await client.reconnect()
+            #expect(await !client.isInTransaction)
+            let newID = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            #expect(newID != id)
+        }
+    }
+
+    /// Lost with nothing open: reported, and the next call opens a new connection.
+    @Test func anIdleConnectionLostIsReportedAndReplaced() async throws {
+        let server = try TestServer.require()
+        try await server.withClient { client in
+            let id = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            try await server.withClient { admin in _ = try await admin.simpleQuery("KILL CONNECTION \(id)") }
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(await client.checkConnection() == MySQLConnectionLoss(transactionLost: false))
+            #expect(try await client.simpleQuery("SELECT 1 AS v").first?.column("v")?.int == 1)
+        }
+    }
+
     @Test func cancelQueryStopsALongStatement() async throws {
         let server = try TestServer.require()
         try await server.withClient { client in

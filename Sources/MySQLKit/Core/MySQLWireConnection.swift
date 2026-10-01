@@ -46,6 +46,15 @@ public actor MySQLWireConnection: MySQLConnectionSession {
         get async { await connection.isInTransaction }
     }
 
+    /// For a closed connection: whether a transaction was open when it closed (the server rolled
+    /// it back).
+    public var transactionWasLost: Bool {
+        get async {
+            if await connection.isInTransaction { return true }
+            return await connection.closedWithTransactionOpen
+        }
+    }
+
     public func simpleQuery(_ sql: String) async throws -> [MySQLRow] {
         try await run(sql).rows
     }

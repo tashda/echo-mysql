@@ -7,6 +7,9 @@ public enum MySQLWireError: LocalizedError, Sendable {
     case unsupportedBindParameter(String)
     /// No session within the configured connect timeout (TCP connect, TLS and login together).
     case connectTimedOut(host: String, seconds: Int)
+    /// The primary connection closed with a transaction open; calls fail until
+    /// `MySQLClient.reconnect()`, so later statements don't silently run outside it.
+    case transactionLost
 
     public var errorDescription: String? {
         switch self {
@@ -18,6 +21,8 @@ public enum MySQLWireError: LocalizedError, Sendable {
             return "Unsupported MySQL bind parameter: \(description)"
         case .connectTimedOut(let host, let seconds):
             return "Could not connect to \(host) within \(seconds) seconds."
+        case .transactionLost:
+            return "The connection was lost with a transaction open, and the server rolled it back. Reconnect to continue."
         }
     }
 }
