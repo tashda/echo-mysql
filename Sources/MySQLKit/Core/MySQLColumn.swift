@@ -57,6 +57,13 @@ public struct MySQLColumn: Hashable, Sendable {
 
     public var isBinary: Bool { characterSet == 63 }
 
+    /// A column made without a server (tests, previews).
+    public init(name: String, type: MySQLDataType, flags: MySQLColumnFlags = [], decimals: UInt32 = 0,
+                length: UInt64 = 0, characterSet: UInt32 = 255, table: String = "", schema: String = "") {
+        self.init(MDBField(name: name, table: table, originalTable: table, database: schema, type: UInt32(type.rawValue),
+                           flags: flags.rawValue, decimals: decimals, length: length, charset: characterSet))
+    }
+
     init(_ field: MDBField) {
         name = field.name
         originalName = field.originalName

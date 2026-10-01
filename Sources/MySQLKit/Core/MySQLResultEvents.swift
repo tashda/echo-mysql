@@ -24,14 +24,20 @@ public struct MySQLResultEvents: AsyncSequence, Sendable {
     public typealias Element = MySQLResultEvent
     let connection: MDBConnection
     let batchSize: Int
-    let lease: MySQLStreamLease
+    let leaseHolder: MySQLStreamLeaseHolder
 
-    public func makeAsyncIterator() -> AsyncIterator { AsyncIterator(connection: connection, batchSize: batchSize, lease: lease) }
+    init(connection: MDBConnection, batchSize: Int, lease: MySQLStreamLease) {
+        self.connection = connection
+        self.batchSize = batchSize
+        leaseHolder = MySQLStreamLeaseHolder(lease)
+    }
+
+    public func makeAsyncIterator() -> AsyncIterator { AsyncIterator(connection: connection, batchSize: batchSize, lease: leaseHolder.take()) }
 
     public struct AsyncIterator: AsyncIteratorProtocol {
         let connection: MDBConnection
         let batchSize: Int
-        let lease: MySQLStreamLease
+        let lease: MySQLStreamLease?
         var columns: [MySQLColumn] = []
         var pendingWarnings = 0
         var held: MDBEvent?
@@ -44,7 +50,7 @@ public struct MySQLResultEvents: AsyncSequence, Sendable {
                 if let held { event = held; self.held = nil } else { event = try await connection.nextEvent(maxRows: batchSize) }
                 guard let event else {
                     finished = true
-                    defer { Task { [lease] in await lease.end() } }
+                    defer { Task { [lease] in await lease?.end() } }
                     // SHOW WARNINGS answers for the last statement, once its batch is over.
                     if pendingWarnings > 0 { return .warnings(try await warnings()) }
                     return nil
@@ -66,7 +72,7 @@ public struct MySQLResultEvents: AsyncSequence, Sendable {
                 }
             } catch {
                 finished = true
-                await lease.end()
+                await lease?.end()
                 throw MySQLError.from(error)
             }
         }

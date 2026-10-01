@@ -1675,3 +1675,30 @@ struct MySQLClientTests {
         MySQLRow(textColumns: values.map { (name: $0.0, value: $0.1) })
     }
 }
+
+@Suite("MySQL type names and placeholders")
+struct MySQLTypeNameAndPlaceholderTests {
+    @Test func sqlTypeNames() {
+        #expect(MySQLColumn(name: "a", type: .longlong, flags: .unsigned).sqlTypeName == "BIGINT UNSIGNED")
+        #expect(MySQLColumn(name: "a", type: .long).sqlTypeName == "INT")
+        #expect(MySQLColumn(name: "a", type: .newdecimal, decimals: 30, length: 67).sqlTypeName == "DECIMAL(65,30)")
+        #expect(MySQLColumn(name: "a", type: .newdecimal, decimals: 2, length: 12).sqlTypeName == "DECIMAL(10,2)")
+        #expect(MySQLColumn(name: "a", type: .varString).sqlTypeName == "VARCHAR")
+        #expect(MySQLColumn(name: "a", type: .varString, characterSet: 63).sqlTypeName == "VARBINARY")
+        #expect(MySQLColumn(name: "a", type: .string, flags: .enum).sqlTypeName == "ENUM")
+        #expect(MySQLColumn(name: "a", type: .blob).sqlTypeName == "TEXT")
+        #expect(MySQLColumn(name: "a", type: .blob, characterSet: 63).sqlTypeName == "BLOB")
+        #expect(MySQLColumn(name: "a", type: .bit, length: 1).sqlTypeName == "BIT")
+        #expect(MySQLColumn(name: "a", type: .bit, length: 64).sqlTypeName == "BIT(64)")
+        #expect(MySQLColumn(name: "a", type: .datetime).sqlTypeName == "DATETIME")
+        #expect(MySQLColumn(name: "a", type: .json).sqlTypeName == "JSON")
+    }
+
+    @Test func placeholdersOutsideLiteralsAndComments() throws {
+        let sql = "SELECT ?, '?', \"?\", `?`, 'it''s ?' -- ?\n, ? /* ? */ # ?\n, ?"
+        #expect(MySQLPlaceholders.positions(in: sql).count == 3)
+        #expect(try MySQLPlaceholders.render("SELECT ?, ?", literals: ["1", "'a'"]) == "SELECT 1, 'a'")
+        #expect(throws: MySQLWireError.self) { _ = try MySQLPlaceholders.render("SELECT ?", literals: []) }
+        #expect(MySQLPlaceholders.positions(in: "SELECT 'a\\'?' , ?").count == 1)
+    }
+}

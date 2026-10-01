@@ -22,6 +22,17 @@ final class MySQLStreamLease: Sendable {
     }
 }
 
+/// Holds a stream's lease until its first iterator takes it: the connection is then released
+/// when that iterator goes away (a `for` loop that ended or broke out), even if the stream
+/// itself is still around. A stream never iterated releases when it goes away.
+final class MySQLStreamLeaseHolder: Sendable {
+    private let lease: Mutex<MySQLStreamLease?>
+
+    init(_ lease: MySQLStreamLease?) { self.lease = Mutex(lease) }
+
+    func take() -> MySQLStreamLease? { lease.withLock { held in defer { held = nil }; return held } }
+}
+
 extension MySQLWireConnection {
     /// Waits for its turn on the connection: calls run one after another, as mysql-nio queued them.
     func acquire() async {

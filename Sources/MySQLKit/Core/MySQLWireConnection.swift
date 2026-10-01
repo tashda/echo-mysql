@@ -156,22 +156,22 @@ public struct MySQLRowStream: AsyncSequence, Sendable {
     public typealias Element = MySQLRow
     let connection: MDBConnection?
     let fixedRows: [MySQLRow]
-    let lease: MySQLStreamLease?
+    let leaseHolder: MySQLStreamLeaseHolder
 
     init(connection: MDBConnection, lease: MySQLStreamLease) {
         self.connection = connection
-        self.lease = lease
+        leaseHolder = MySQLStreamLeaseHolder(lease)
         fixedRows = []
     }
 
     /// A stream of rows already in memory (tests, previews).
     public init(rows: [MySQLRow]) {
         connection = nil
-        lease = nil
+        leaseHolder = MySQLStreamLeaseHolder(nil)
         fixedRows = rows
     }
 
-    public func makeAsyncIterator() -> AsyncIterator { AsyncIterator(connection: connection, fixedRows: fixedRows, lease: lease) }
+    public func makeAsyncIterator() -> AsyncIterator { AsyncIterator(connection: connection, fixedRows: fixedRows, lease: leaseHolder.take()) }
 
     public struct AsyncIterator: AsyncIteratorProtocol {
         let connection: MDBConnection?
