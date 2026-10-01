@@ -56,6 +56,10 @@ import MySQLWire
                 == "CREATE USER 'app'@'%' IDENTIFIED BY 'pw'")
     }
 
+    @Test func readOnlySchemaStatement() {
+        #expect(MySQLAdminClient.readOnlySchemaSQL(name: "a`b", readOnly: true) == "ALTER SCHEMA `a``b` READ ONLY = 1")
+    }
+
     @Test func tlsRequirementClauses() {
         #expect(MySQLTLSRequirement.x509.clause == " REQUIRE X509")
         #expect(MySQLTLSRequirement.subject("/CN=o'k").clause == " REQUIRE SUBJECT '/CN=o''k'")
