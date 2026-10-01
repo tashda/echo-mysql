@@ -31,11 +31,11 @@ public extension MySQLSecurityClient {
         """
 
     /// MariaDB 10.4+ keeps accounts in mysql.global_priv as JSON; its mysql.user view has no
-    /// account_locked column.
+    /// account_locked column. JSON_VALUE gives a JSON true back as 1.
     internal static let mariaDBUsersSQL = """
         SELECT User, Host,
             JSON_VALUE(Priv, '$.plugin') AS plugin,
-            IF(JSON_VALUE(Priv, '$.account_locked') = 'true', 'Y', 'N') AS account_locked,
+            IF(JSON_VALUE(Priv, '$.account_locked') IN ('true', '1'), 'Y', 'N') AS account_locked,
             IF(JSON_VALUE(Priv, '$.password_last_changed') = '0', 'Y', 'N') AS password_expired
         FROM mysql.global_priv
         ORDER BY User, Host;
