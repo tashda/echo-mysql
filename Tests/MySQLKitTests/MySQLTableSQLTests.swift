@@ -36,3 +36,20 @@ import Testing
         #expect(sql == "INSERT INTO `s`.`t` (`g`, `j`, `v`, `n`) VALUES (ST_GeomFromText(?, 4326), CAST(? AS JSON), STRING_TO_VECTOR(?), ?)")
     }
 }
+
+@Suite struct MySQLUserSQLTests {
+    let security = MySQLClient(configuration: MySQLConfiguration(host: "localhost", username: "root")).security
+
+    @Test func passwordWithoutPluginIsIdentifiedBy() {
+        #expect(security.createUserSQL(username: "app", host: "%", password: "p'w", authenticationPlugin: nil)
+                == "CREATE USER 'app'@'%' IDENTIFIED BY 'p''w'")
+        #expect(security.createUserSQL(username: "app", host: "%", password: "pw", authenticationPlugin: "caching_sha2_password")
+                == "CREATE USER 'app'@'%' IDENTIFIED WITH caching_sha2_password BY 'pw'")
+        #expect(security.createUserSQL(username: "app", host: "%", password: nil, authenticationPlugin: nil) == "CREATE USER 'app'@'%'")
+    }
+
+    @Test func rolesNeedNoHost() {
+        #expect(security.roleName("lab_reader", host: nil) == "'lab_reader'")
+        #expect(security.roleName("lab_reader", host: "%") == "'lab_reader'@'%'")
+    }
+}

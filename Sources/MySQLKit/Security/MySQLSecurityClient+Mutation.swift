@@ -5,15 +5,23 @@ public extension MySQLSecurityClient {
         password: String? = nil,
         authenticationPlugin: String? = nil
     ) async throws -> MySQLUserMutationResult {
-        var statement = "CREATE USER '\(escapedLiteral(username))'@'\(escapedLiteral(host))'"
-        if let authenticationPlugin, !authenticationPlugin.isEmpty {
-            statement += " IDENTIFIED WITH \(authenticationPlugin)"
-        }
-        if let password {
-            statement += " BY '\(escapedLiteral(password))'"
-        }
-        try await executeSecurityStatement(statement)
+        try await executeSecurityStatement(createUserSQL(username: username, host: host, password: password,
+                                                        authenticationPlugin: authenticationPlugin))
         return MySQLUserMutationResult(username: username, host: host, operation: "CREATE USER")
+    }
+
+    /// `IDENTIFIED BY` needs `IDENTIFIED` also without a plugin; it was left out, so a user with a
+    /// password and no plugin could not be created.
+    internal func createUserSQL(username: String, host: String, password: String?, authenticationPlugin: String?) -> String {
+        var statement = "CREATE USER '\(escapedLiteral(username))'@'\(escapedLiteral(host))'"
+        let plugin = authenticationPlugin.flatMap { $0.isEmpty ? nil : $0 }
+        switch (plugin, password) {
+        case let (plugin?, password?): statement += " IDENTIFIED WITH \(plugin) BY '\(escapedLiteral(password))'"
+        case let (plugin?, nil): statement += " IDENTIFIED WITH \(plugin)"
+        case let (nil, password?): statement += " IDENTIFIED BY '\(escapedLiteral(password))'"
+        case (nil, nil): break
+        }
+        return statement
     }
 
     func dropUser(username: String, host: String, ifExists: Bool = true) async throws -> MySQLUserMutationResult {
