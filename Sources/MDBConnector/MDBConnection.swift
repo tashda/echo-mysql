@@ -12,7 +12,7 @@ import Foundation
 /// there. Connector/C's non-blocking API (`*_start` / `*_cont`) says what it waits for; the actor
 /// waits for the socket with `MDBSocketWait` instead of blocking a thread.
 public actor MDBConnection {
-    private let queue: DispatchSerialQueue
+    private let queue: MDBConnectionQueue
     var handle: UnsafeMutablePointer<MYSQL>?
     /// The result set being read (`mysql_use_result`), until its rows are all read or dropped.
     var result: UnsafeMutablePointer<MYSQL_RES>?
@@ -29,10 +29,12 @@ public actor MDBConnection {
     /// Whether a transaction was open when the connection closed (the server rolls it back).
     public private(set) var closedWithTransactionOpen = false
 
+    #if canImport(Darwin)
     public nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
+    #endif
 
     public init(label: String = "MDBConnection") {
-        queue = DispatchSerialQueue(label: label)
+        queue = MDBConnectionQueue(label: label)
     }
 
     isolated deinit {
@@ -74,7 +76,7 @@ public actor MDBConnection {
         guard poll(&descriptor, 1, 0) > 0 else { return true }
         if descriptor.revents & Int16(POLLHUP | POLLERR | POLLNVAL) != 0 { return false }
         var byte: UInt8 = 0
-        return recv(socket, &byte, 1, MSG_PEEK | MSG_DONTWAIT) > 0
+        return recv(socket, &byte, 1, Int32(MSG_PEEK | MSG_DONTWAIT)) > 0
     }
 
     /// The string escaped for a quoted literal with this connection's character set and

@@ -1,4 +1,13 @@
 import Dispatch
+
+/// The connection's queue (decision D10): on Apple platforms also the actor's executor, so
+/// Connector/C is only touched there; Linux's Dispatch has no serial-queue executor, so there the
+/// actor keeps its default executor and the queue only runs the socket sources.
+#if canImport(Darwin)
+typealias MDBConnectionQueue = DispatchSerialQueue
+#else
+typealias MDBConnectionQueue = DispatchQueue
+#endif
 import Synchronization
 
 /// What a connection waits for on its socket.
@@ -33,7 +42,7 @@ final class MDBSocketWait: Sendable {
     static func wait(
         socket: Int32,
         for events: MDBSocketReadiness,
-        on queue: DispatchSerialQueue,
+        on queue: MDBConnectionQueue,
         deadline: ContinuousClock.Instant?
     ) async throws -> MDBSocketReadiness {
         try await MDBSocketWait().run(socket: socket, for: events, on: queue, deadline: deadline)
@@ -42,7 +51,7 @@ final class MDBSocketWait: Sendable {
     func run(
         socket: Int32,
         for events: MDBSocketReadiness,
-        on queue: DispatchSerialQueue,
+        on queue: MDBConnectionQueue,
         deadline: ContinuousClock.Instant?
     ) async throws -> MDBSocketReadiness {
         let wait = self
@@ -59,7 +68,7 @@ final class MDBSocketWait: Sendable {
         _ continuation: CheckedContinuation<MDBSocketReadiness, any Error>,
         socket: Int32,
         events: MDBSocketReadiness,
-        queue: DispatchSerialQueue,
+        queue: MDBConnectionQueue,
         deadline: ContinuousClock.Instant?
     ) {
         // The sources live only inside the lock; making, starting and cancelling them never
