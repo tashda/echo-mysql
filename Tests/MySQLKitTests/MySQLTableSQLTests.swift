@@ -56,6 +56,14 @@ import MySQLWire
                 == "CREATE USER 'app'@'%' IDENTIFIED BY 'pw'")
     }
 
+    @Test func viewOptions() {
+        #expect(MySQLViewClient.createViewSQL(schema: "s", name: "v", definitionSQL: "SELECT 1", replace: false, algorithm: .merge,
+                                              definer: ("ghost", "%"), sqlSecurity: .definer, checkOption: .cascaded)
+                == "CREATE ALGORITHM = MERGE DEFINER = 'ghost'@'%' SQL SECURITY DEFINER VIEW `s`.`v` AS SELECT 1 WITH CASCADED CHECK OPTION")
+        #expect(MySQLViewClient.createViewSQL(schema: "s", name: "v", definitionSQL: "SELECT 1", replace: true, algorithm: nil,
+                                              definer: nil, sqlSecurity: nil, checkOption: nil) == "CREATE OR REPLACE VIEW `s`.`v` AS SELECT 1")
+    }
+
     @Test func readOnlySchemaStatement() {
         #expect(MySQLAdminClient.readOnlySchemaSQL(name: "a`b", readOnly: true) == "ALTER SCHEMA `a``b` READ ONLY = 1")
     }
