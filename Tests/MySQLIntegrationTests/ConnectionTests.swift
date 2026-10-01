@@ -4,6 +4,14 @@ import MySQLKitTesting
 import Testing
 
 /// Connecting, queries, binds, streaming and what happens when a connection is lost.
+/// Linux runs on the system's Connector/C (Ubuntu's, with GnuTLS), which can't interrupt a statement
+/// over TLS or refuse a plaintext RSA key fetch (tashda/mysql-wire#3); Echo ships on macOS only.
+#if os(Linux)
+let systemConnectorOnLinux = true
+#else
+let systemConnectorOnLinux = false
+#endif
+
 @Suite(.testServer)
 struct ConnectionTests {
     @Test func connectsAndQueries() async throws {
@@ -220,7 +228,8 @@ struct ConnectionTests {
 
     /// Echo's Force Stop: the statement ends at once, the open transaction is reported (and rolled
     /// back by the server), and the next call gets a new connection.
-    @Test func closeRunningConnectionStopsAStatementInATransaction() async throws {
+    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/mysql-wire#3"))
+    func closeRunningConnectionStopsAStatementInATransaction() async throws {
         let server = try TestServer.require()
         try await server.withClient { client in
             #expect(await !client.isInTransaction)
@@ -241,7 +250,8 @@ struct ConnectionTests {
     }
 
     /// A cancelled task ends its statement and its connection; the next call gets a new one.
-    @Test func cancellingARunningCallReplacesTheConnection() async throws {
+    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/mysql-wire#3"))
+    func cancellingARunningCallReplacesTheConnection() async throws {
         let server = try TestServer.require()
         try await server.withClient { client in
             let id = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
@@ -256,7 +266,8 @@ struct ConnectionTests {
 
     /// Decision D18: a `caching_sha2_password` full sign-in without TLS fails rather than fetch the
     /// server's RSA key in plaintext, and works with the key from a file the user chose.
-    @Test func cachingSHA2WithoutTLSNeedsAKeyFile() async throws {
+    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/mysql-wire#3"))
+    func cachingSHA2WithoutTLSNeedsAKeyFile() async throws {
         let server = try TestServer.require()
         try await server.withClient { admin in
             guard try await admin.serverFlavor().isMySQL else { return }
