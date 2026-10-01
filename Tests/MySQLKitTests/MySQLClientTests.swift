@@ -500,7 +500,7 @@ struct MySQLClientTests {
                     rows: [Self.textRow([("Variable_name", "Threads_connected"), ("Value", "12")])],
                     metadata: nil
                 ),
-                "SHOW GLOBAL VARIABLES LIKE ?": MySQLWireQueryResult(
+                "SHOW GLOBAL VARIABLES LIKE 'max_connections'": MySQLWireQueryResult(
                     rows: [Self.textRow([("Variable_name", "max_connections"), ("Value", "151")])],
                     metadata: nil
                 ),
@@ -563,16 +563,7 @@ struct MySQLClientTests {
 
     @Test
     func securityReturnsUsersAndGrants() async throws {
-        let listUsersSQL = """
-        SELECT
-            User,
-            Host,
-            plugin,
-            account_locked,
-            password_expired
-        FROM mysql.user
-        ORDER BY User, Host;
-        """
+        let listUsersSQL = MySQLSecurityClient.mysqlUsersSQL
 
         let metadata = MockConnectionSession(
             simpleQueryResults: [
@@ -619,7 +610,8 @@ struct MySQLClientTests {
         #expect(users.last?.accountLocked == true)
         #expect(grants == ["GRANT ALL PRIVILEGES ON *.* TO `echo`@`localhost`"])
         #expect(await metadata.preparedQueries.count == 1)
-        #expect(await metadata.simpleQueries == ["SHOW GRANTS FOR 'echo'@'localhost'"])
+        // listUsers asks the server's version first (MariaDB keeps accounts elsewhere).
+        #expect(await metadata.simpleQueries == ["SELECT VERSION() AS version", "SHOW GRANTS FOR 'echo'@'localhost'"])
     }
 
     @Test
@@ -955,7 +947,7 @@ struct MySQLClientTests {
     func adminMutationSecurityMutationAndPerformanceReports() async throws {
         let activity = MockConnectionSession(
             simpleQueryResults: [
-                "SELECT * FROM mysql.general_log ORDER BY event_time DESC LIMIT 100": [
+                "SELECT * FROM mysql.`general_log` ORDER BY event_time DESC LIMIT 100": [
                     Self.textRow([("event_time", "2026-03-27 08:00:00"), ("argument", "SELECT 1")])
                 ],
                 """
@@ -1036,11 +1028,11 @@ struct MySQLClientTests {
         #expect(await primary.simpleQueries == [
             "RENAME TABLE `sakila`.`actor_old` TO `sakila`.`actor_new`",
             "DROP TABLE IF EXISTS `sakila`.`actor_tmp`",
-            "CREATE USER 'ci'@'%' BY 'secret'",
+            "CREATE USER 'ci'@'%' IDENTIFIED BY 'secret'",
             "GRANT SELECT ON `sakila`.* TO 'ci'@'%'",
             "REVOKE SELECT ON `sakila`.* FROM 'ci'@'%'",
-            "CREATE ROLE 'report_reader'@'%'",
-            "DROP ROLE 'report_reader'@'%'",
+            "CREATE ROLE 'report_reader'",
+            "DROP ROLE 'report_reader'",
             "DROP USER IF EXISTS 'ci'@'%'"
         ])
     }
@@ -1294,12 +1286,12 @@ struct MySQLClientTests {
         #expect(unlocked.operation == "UNLOCK USER")
         #expect(primaryStatus?.rawValues["File"] == "binlog.000001")
         #expect(await primary.simpleQueries == [
-            "CREATE USER 'ops'@'%' BY 'pw'",
+            "CREATE USER 'ops'@'%' IDENTIFIED BY 'pw'",
             "ALTER USER 'ops'@'%' IDENTIFIED BY 'pw2'",
             "ALTER USER 'ops'@'%' ACCOUNT LOCK",
             "ALTER USER 'ops'@'%' ACCOUNT UNLOCK",
-            "GRANT 'report_reader'@'%' TO 'ops'@'%'",
-            "REVOKE 'report_reader'@'%' FROM 'ops'@'%'",
+            "GRANT 'report_reader' TO 'ops'@'%'",
+            "REVOKE 'report_reader' FROM 'ops'@'%'",
             "SET DEFAULT ROLE 'report_reader'@'%' TO 'ops'@'%'",
             "SHOW MASTER STATUS"
         ])
