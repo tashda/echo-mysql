@@ -84,6 +84,27 @@ public extension MySQLBulkOperationClient {
     }
 }
 
+public extension MySQLBulkOperationClient {
+    /// Updates the rows whose columns equal the given values (`WHERE a = ? AND b = ?`). Returns the
+    /// statement's affected-row count as MySQL reports it.
+    @discardableResult
+    func updateRows(in table: String, schema: String, set values: [String: MySQLInsertValue],
+                    where conditions: [String: MySQLInsertValue]) async throws -> Int {
+        let (sql, binds) = MySQLTableSQL.update(schema: schema, table: table, set: values, where: conditions)
+        let connection = try await serverConnection.primary()
+        _ = try await connection.query(sql, binds: binds)
+        return 0
+    }
+
+    /// Deletes the rows whose columns equal the given values. An empty condition is refused.
+    func deleteRows(from table: String, schema: String, where conditions: [String: MySQLInsertValue]) async throws {
+        guard !conditions.isEmpty else { throw MySQLScriptError(statementNumber: 0, statement: "DELETE", underlying: "deleteRows needs a condition") }
+        let (sql, binds) = MySQLTableSQL.delete(schema: schema, table: table, where: conditions)
+        let connection = try await serverConnection.primary()
+        _ = try await connection.query(sql, binds: binds)
+    }
+}
+
 /// The statements behind the table APIs, separate so they can be tested without a server.
 enum MySQLTableSQL {
     static func identifier(_ name: String) -> String { "`" + name.replacingOccurrences(of: "`", with: "``") + "`" }
@@ -167,6 +188,22 @@ enum MySQLTableSQL {
         if let cache { sql += " CACHE \(cache)" }
         sql += cycle ? " CYCLE" : " NOCYCLE"
         return sql
+    }
+
+    static func update(schema: String, table: String, set values: [String: MySQLInsertValue],
+                       where conditions: [String: MySQLInsertValue]) -> (String, [MySQLData]) {
+        let assignments = values.sorted { $0.key < $1.key }
+        let filters = conditions.sorted { $0.key < $1.key }
+        var sql = "UPDATE \(identifier(schema)).\(identifier(table)) SET "
+            + assignments.map { "\(identifier($0.key)) = \($0.value.placeholder)" }.joined(separator: ", ")
+        if !filters.isEmpty { sql += " WHERE " + filters.map { "\(identifier($0.key)) = \($0.value.placeholder)" }.joined(separator: " AND ") }
+        return (sql, assignments.map(\.value.bind) + filters.map(\.value.bind))
+    }
+
+    static func delete(schema: String, table: String, where conditions: [String: MySQLInsertValue]) -> (String, [MySQLData]) {
+        let filters = conditions.sorted { $0.key < $1.key }
+        return ("DELETE FROM \(identifier(schema)).\(identifier(table)) WHERE "
+                    + filters.map { "\(identifier($0.key)) = \($0.value.placeholder)" }.joined(separator: " AND "), filters.map(\.value.bind))
     }
 
     static func insert(schema: String, table: String, columns: [String], row: [MySQLInsertValue]) -> String {

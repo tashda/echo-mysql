@@ -1,5 +1,6 @@
 import Testing
 @testable import MySQLKit
+import MySQLWire
 
 @Suite struct MySQLTableSQLTests {
     @Test func columnsCarryEveryAttribute() {
@@ -66,5 +67,14 @@ import Testing
     @Test func sequences() {
         #expect(MySQLTableSQL.createSequence(schema: "s", name: "seq", start: 100, increment: 5, minValue: 1, maxValue: nil, cache: 10, cycle: true)
                 == "CREATE SEQUENCE `s`.`seq` START WITH 100 INCREMENT BY 5 MINVALUE 1 NO MAXVALUE CACHE 10 CYCLE")
+    }
+}
+
+@Suite struct MySQLUpdateDeleteSQLTests {
+    @Test func equalityConditionsAreBound() {
+        let (update, binds) = MySQLTableSQL.update(schema: "s", table: "t", set: ["price": .data(MySQLData(string: "2.00"))], where: ["sku": .data(MySQLData(string: "A"))])
+        #expect(update == "UPDATE `s`.`t` SET `price` = ? WHERE `sku` = ?")
+        #expect(binds.count == 2)
+        #expect(MySQLTableSQL.delete(schema: "s", table: "t", where: ["a": .null, "b": .data(MySQLData(int: 1))]).0 == "DELETE FROM `s`.`t` WHERE `a` = ? AND `b` = ?")
     }
 }
