@@ -7,6 +7,12 @@ public struct MySQLWarning: Sendable, Equatable {
     public let level: String
     public let code: Int
     public let message: String
+
+    public init(level: String, code: Int, message: String) {
+        self.level = level
+        self.code = code
+        self.message = message
+    }
 }
 
 /// What running SQL produced, in order: each result set's columns and rows, each statement's

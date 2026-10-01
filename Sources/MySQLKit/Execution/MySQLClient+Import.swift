@@ -15,6 +15,13 @@ public struct MySQLImportSummary: Sendable, Equatable {
     public let batches: Int
     /// Warnings that didn't stop the import (a server without strict mode keeps truncated values).
     public let warnings: [MySQLWarning]
+
+    public init(method: Method, rowCount: Int, batches: Int, warnings: [MySQLWarning]) {
+        self.method = method
+        self.rowCount = rowCount
+        self.batches = batches
+        self.warnings = warnings
+    }
 }
 
 /// Why an import stored nothing.
