@@ -16,6 +16,13 @@ public extension MySQLAdminClient {
                                                 options: options, ifNotExists: ifNotExists))
     }
 
+    /// A sequence (MariaDB 10.3+; MySQL has none).
+    func createSequence(schema: String, name: String, start: Int = 1, increment: Int = 1, minValue: Int? = nil,
+                        maxValue: Int? = nil, cache: Int? = nil, cycle: Bool = false) async throws {
+        try await run(MySQLTableSQL.createSequence(schema: schema, name: name, start: start, increment: increment,
+                                                   minValue: minValue, maxValue: maxValue, cache: cache, cycle: cycle))
+    }
+
     func addColumn(schema: String, table: String, column: MySQLColumnDefinition, after: String? = nil) async throws {
         var sql = "ALTER TABLE \(MySQLTableSQL.identifier(schema)).\(MySQLTableSQL.identifier(table)) ADD COLUMN \(MySQLTableSQL.column(column))"
         if let after { sql += " AFTER \(MySQLTableSQL.identifier(after))" }
@@ -126,6 +133,7 @@ enum MySQLTableSQL {
         if let rowFormat = options.rowFormat { sql += " ROW_FORMAT=\(rowFormat)" }
         if let comment = options.comment { sql += " COMMENT=\(literal(comment))" }
         if options.systemVersioning { sql += " WITH SYSTEM VERSIONING" }
+        if let partitioning = options.partitioning { sql += " " + partitioning.sql }
         return sql
     }
 
@@ -148,6 +156,16 @@ enum MySQLTableSQL {
             + "(\(referencedColumns.map(identifier).joined(separator: ", ")))"
         if let onDelete { sql += " ON DELETE \(onDelete.rawValue)" }
         if let onUpdate { sql += " ON UPDATE \(onUpdate.rawValue)" }
+        return sql
+    }
+
+    static func createSequence(schema: String, name: String, start: Int, increment: Int, minValue: Int?, maxValue: Int?,
+                               cache: Int?, cycle: Bool) -> String {
+        var sql = "CREATE SEQUENCE \(identifier(schema)).\(identifier(name)) START WITH \(start) INCREMENT BY \(increment)"
+        sql += minValue.map { " MINVALUE \($0)" } ?? " NO MINVALUE"
+        sql += maxValue.map { " MAXVALUE \($0)" } ?? " NO MAXVALUE"
+        if let cache { sql += " CACHE \(cache)" }
+        sql += cycle ? " CYCLE" : " NOCYCLE"
         return sql
     }
 

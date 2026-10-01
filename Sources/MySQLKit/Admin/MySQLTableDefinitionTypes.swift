@@ -64,15 +64,54 @@ public struct MySQLTableOptions: Sendable, Hashable {
     public var rowFormat: String?
     /// MariaDB system-versioned table (`WITH SYSTEM VERSIONING`).
     public var systemVersioning: Bool
+    public var partitioning: MySQLPartitioning?
 
     public init(engine: String? = nil, characterSet: String? = nil, collation: String? = nil, comment: String? = nil,
-                rowFormat: String? = nil, systemVersioning: Bool = false) {
+                rowFormat: String? = nil, systemVersioning: Bool = false, partitioning: MySQLPartitioning? = nil) {
         self.engine = engine
         self.characterSet = characterSet
         self.collation = collation
         self.comment = comment
         self.rowFormat = rowFormat
         self.systemVersioning = systemVersioning
+        self.partitioning = partitioning
+    }
+}
+
+/// `PARTITION BY …` for a new table. Expressions and bounds are SQL (like view bodies).
+public enum MySQLPartitioning: Sendable, Hashable {
+    /// `RANGE (expression)`; a nil bound is `MAXVALUE`.
+    case range(expression: String, partitions: [(name: String, lessThan: String?)])
+    /// `RANGE COLUMNS (columns)`.
+    case rangeColumns(columns: [String], partitions: [(name: String, lessThan: [String])])
+    /// `LIST (expression)`.
+    case list(expression: String, partitions: [(name: String, values: [String])])
+    case hash(expression: String, count: Int)
+    case key(columns: [String], count: Int)
+
+    public static func == (lhs: MySQLPartitioning, rhs: MySQLPartitioning) -> Bool { lhs.sql == rhs.sql }
+    public func hash(into hasher: inout Hasher) { hasher.combine(sql) }
+
+    var sql: String {
+        func names(_ columns: [String]) -> String { columns.map(MySQLTableSQL.identifier).joined(separator: ", ") }
+        switch self {
+        case .range(let expression, let partitions):
+            return "PARTITION BY RANGE (\(expression)) (" + partitions.map {
+                "PARTITION \(MySQLTableSQL.identifier($0.name)) VALUES LESS THAN \($0.lessThan.map { "(\($0))" } ?? "MAXVALUE")"
+            }.joined(separator: ", ") + ")"
+        case .rangeColumns(let columns, let partitions):
+            return "PARTITION BY RANGE COLUMNS (\(names(columns))) (" + partitions.map {
+                "PARTITION \(MySQLTableSQL.identifier($0.name)) VALUES LESS THAN (\($0.lessThan.joined(separator: ", ")))"
+            }.joined(separator: ", ") + ")"
+        case .list(let expression, let partitions):
+            return "PARTITION BY LIST (\(expression)) (" + partitions.map {
+                "PARTITION \(MySQLTableSQL.identifier($0.name)) VALUES IN (\($0.values.joined(separator: ", ")))"
+            }.joined(separator: ", ") + ")"
+        case .hash(let expression, let count):
+            return "PARTITION BY HASH (\(expression)) PARTITIONS \(count)"
+        case .key(let columns, let count):
+            return "PARTITION BY KEY (\(names(columns))) PARTITIONS \(count)"
+        }
     }
 }
 

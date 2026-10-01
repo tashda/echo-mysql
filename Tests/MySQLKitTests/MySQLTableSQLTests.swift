@@ -53,3 +53,18 @@ import Testing
         #expect(security.roleName("lab_reader", host: "%") == "'lab_reader'@'%'")
     }
 }
+
+@Suite struct MySQLPartitionAndSequenceSQLTests {
+    @Test func partitioningClauses() {
+        let range = MySQLTableSQL.createTable(schema: "s", name: "sales", columns: [MySQLColumnDefinition(name: "y", dataType: "INT")], primaryKey: [],
+                                              options: .init(partitioning: .range(expression: "`y`", partitions: [("p2024", "2025"), ("pmax", nil)])), ifNotExists: false)
+        #expect(range.hasSuffix("PARTITION BY RANGE (`y`) (PARTITION `p2024` VALUES LESS THAN (2025), PARTITION `pmax` VALUES LESS THAN MAXVALUE)"))
+        #expect(MySQLPartitioning.list(expression: "`r`", partitions: [("north", ["1", "2"])]).sql == "PARTITION BY LIST (`r`) (PARTITION `north` VALUES IN (1, 2))")
+        #expect(MySQLPartitioning.key(columns: ["id"], count: 4).sql == "PARTITION BY KEY (`id`) PARTITIONS 4")
+    }
+
+    @Test func sequences() {
+        #expect(MySQLTableSQL.createSequence(schema: "s", name: "seq", start: 100, increment: 5, minValue: 1, maxValue: nil, cache: 10, cycle: true)
+                == "CREATE SEQUENCE `s`.`seq` START WITH 100 INCREMENT BY 5 MINVALUE 1 NO MAXVALUE CACHE 10 CYCLE")
+    }
+}
