@@ -148,9 +148,14 @@ public actor MDBConnection {
                 let ready = try await waitForSocket(events, deadline: waitUntil)
                 if ready.contains(.readable) { happened |= Int32(MYSQL_WAIT_READ) }
                 if ready.contains(.writable) { happened |= Int32(MYSQL_WAIT_WRITE) }
-            } catch is MDBSocketTimeout {
-                if let deadline, ContinuousClock.now >= deadline { throw MDBSocketTimeout() }
+            } catch is MDBSocketTimeout where deadline.map({ ContinuousClock.now < $0 }) ?? true {
                 happened = Int32(MYSQL_WAIT_TIMEOUT)
+            } catch {
+                // The call stays suspended inside Connector/C: the next call would start over its
+                // context, mid-packet. Nothing can resume or abandon it, so the connection closes
+                // (a cancelled task or a passed deadline ends the connection, not just the call).
+                await close()
+                throw error
             }
             status = resume(happened)
         }

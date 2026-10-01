@@ -186,6 +186,42 @@ struct ConnectionTests {
         }
     }
 
+    /// Echo's Force Stop: the statement ends at once, the open transaction is reported (and rolled
+    /// back by the server), and the next call gets a new connection.
+    @Test func closeRunningConnectionStopsAStatementInATransaction() async throws {
+        let server = try TestServer.require()
+        try await server.withClient { client in
+            #expect(await !client.isInTransaction)
+            _ = try await client.simpleQuery("START TRANSACTION")
+            #expect(await client.isInTransaction)
+            let id = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            let started = ContinuousClock.now
+            let sleeping = Task { try await client.simpleQuery("SELECT SLEEP(30)") }
+            try await Task.sleep(for: .milliseconds(500))
+            let outcome = await client.closeRunningConnection()
+            #expect(outcome.closed && outcome.transactionWasOpen)
+            await #expect(throws: (any Error).self) { _ = try await sleeping.value }
+            #expect(ContinuousClock.now - started < .seconds(5))
+            #expect(await !client.isInTransaction)
+            let newID = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            #expect(newID != id)
+        }
+    }
+
+    /// A cancelled task ends its statement and its connection; the next call gets a new one.
+    @Test func cancellingARunningCallReplacesTheConnection() async throws {
+        let server = try TestServer.require()
+        try await server.withClient { client in
+            let id = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            let sleeping = Task { try await client.simpleQuery("SELECT SLEEP(30)") }
+            try await Task.sleep(for: .milliseconds(500))
+            sleeping.cancel()
+            await #expect(throws: (any Error).self) { _ = try await sleeping.value }
+            let newID = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            #expect(newID != id)
+        }
+    }
+
     @Test func closedClientCanBeUsedAgain() async throws {
         let server = try TestServer.require()
         let client = server.client()

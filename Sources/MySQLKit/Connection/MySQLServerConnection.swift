@@ -80,6 +80,24 @@ public actor MySQLServerConnection: Sendable {
         return connection
     }
 
+    /// Whether a transaction is open on the primary connection; false when none is open. Never
+    /// opens a connection.
+    public func primaryIsInTransaction() async -> Bool {
+        guard let connection = primaryConnection as? MySQLWireConnection else { return false }
+        return await connection.isInTransaction
+    }
+
+    /// Force Stop: closes the primary connection, also while a statement runs on it (the statement
+    /// ends with a lost connection, the server rolls back an open transaction). The next call opens
+    /// a new one. Returns whether there was one, and whether a transaction was open on it.
+    public func closePrimary() async -> (closed: Bool, transactionWasOpen: Bool) {
+        guard let connection = primaryConnection else { return (false, false) }
+        primaryConnection = nil
+        let transactionWasOpen = await (connection as? MySQLWireConnection)?.isInTransaction ?? false
+        await connection.close()
+        return (true, transactionWasOpen)
+    }
+
     public func newDedicatedConnection() async throws -> any MySQLConnectionSession {
         try await connectionFactory(configuration, logger)
     }

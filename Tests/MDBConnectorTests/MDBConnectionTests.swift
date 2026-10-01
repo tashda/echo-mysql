@@ -132,6 +132,23 @@ struct MDBConnectionTests {
         #expect(ContinuousClock.now - started < .seconds(2))
     }
 
+    /// A call cut off mid-way can't be resumed by Connector/C, so the connection closes rather than
+    /// letting the next statement start over a suspended one.
+    @Test func cancellingAWaitingTaskClosesTheConnection() async throws {
+        let connection = try await LabServer.connect()
+        let reader = Task {
+            try await connection.send("SELECT SLEEP(30)")
+            return try await connection.nextEvent()
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        let started = ContinuousClock.now
+        reader.cancel()
+        await #expect(throws: CancellationError.self) { _ = try await reader.value }
+        #expect(ContinuousClock.now - started < .seconds(2))
+        #expect(await !connection.isOpen)
+        await #expect(throws: MDBError.self) { try await connection.send("SELECT 1") }
+    }
+
     @Test func aKilledConnectionIsNoticedWhileIdle() async throws {
         let connection = try await LabServer.connect()
         let killer = try await LabServer.connect()

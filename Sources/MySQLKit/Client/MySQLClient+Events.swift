@@ -18,8 +18,16 @@ public extension MySQLClient {
         try await serverConnection.cancelQuery(threadID: UInt32(truncatingIfNeeded: id))
     }
 
-    /// Whether a transaction is open on the primary connection.
+    /// Force Stop: closes the primary connection while its statement runs (for a server that
+    /// doesn't answer `KILL QUERY`). Returns whether a connection was closed, and whether a
+    /// transaction was open on it (the server rolls it back).
+    func closeRunningConnection() async -> (closed: Bool, transactionWasOpen: Bool) {
+        await serverConnection.closePrimary()
+    }
+
+    /// Whether a transaction is open on the primary connection (as of its last statement); never
+    /// opens a connection.
     var isInTransaction: Bool {
-        get async { await ((try? await serverConnection.primary()) as? MySQLWireConnection)?.isInTransaction ?? false }
+        get async { await serverConnection.primaryIsInTransaction() }
     }
 }
