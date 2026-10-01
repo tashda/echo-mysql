@@ -8,7 +8,7 @@ import Testing
 
 /// The server through a Toxiproxy (`MYSQL_TEST_PROXY_URL`), whose HTTP API (`MYSQL_TEST_PROXY_CONTROL`)
 /// adds latency, drops the link or swallows traffic.
-@Suite(.testServer(TestServer.proxyVariable), .serialized)
+@Suite(.testServer(TestServer.proxyVariable), .serialized, .disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C can't interrupt a stalled read: tashda/mysql-wire#3"))
 struct FaultTests {
     /// Toxiproxy's HTTP API, for the one proxy in front of the server.
     struct Toxiproxy {
