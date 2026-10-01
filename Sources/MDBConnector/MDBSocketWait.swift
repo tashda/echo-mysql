@@ -74,20 +74,27 @@ final class MDBSocketWait: Sendable {
         // The sources live only inside the lock; making, starting and cancelling them never
         // blocks, and their handlers run later, on the connection's queue.
         state.withLock { state in
+            #if canImport(Darwin)
+            let sourceQueue = queue
+            #else
+            // Linux: the actor doesn't run on the connection's queue (Dispatch has no serial-queue
+            // executor there) and that queue isn't Sendable, so each wait's sources get their own.
+            let sourceQueue = DispatchQueue(label: "mdb-socket-wait")
+            #endif
             if events.contains(.readable) {
-                let source = DispatchSource.makeReadSource(fileDescriptor: socket, queue: queue)
+                let source = DispatchSource.makeReadSource(fileDescriptor: socket, queue: sourceQueue)
                 source.setEventHandler { [self] in finish(.success(.readable)) }
                 state.sources.append(source)
             }
             if events.contains(.writable) {
-                let source = DispatchSource.makeWriteSource(fileDescriptor: socket, queue: queue)
+                let source = DispatchSource.makeWriteSource(fileDescriptor: socket, queue: sourceQueue)
                 source.setEventHandler { [self] in finish(.success(.writable)) }
                 state.sources.append(source)
             }
             if let deadline {
                 let remaining = ContinuousClock.now.duration(to: deadline)
                 let nanoseconds = max(0, remaining.components.seconds * 1_000_000_000 + remaining.components.attoseconds / 1_000_000_000)
-                let timer = DispatchSource.makeTimerSource(queue: queue)
+                let timer = DispatchSource.makeTimerSource(queue: sourceQueue)
                 timer.schedule(deadline: .now() + .nanoseconds(Int(nanoseconds)))
                 timer.setEventHandler { [self] in finish(.failure(MDBSocketTimeout())) }
                 state.sources.append(timer)
