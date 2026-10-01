@@ -1406,7 +1406,6 @@ struct MySQLClientTests {
             "SHOW SESSION VARIABLES",
             "SHOW SESSION VARIABLES",
             "SHOW SESSION VARIABLES WHERE Variable_name IN ('transaction_isolation', 'tx_isolation')",
-            "SET SESSION `sql_mode` = 'ANSI,STRICT_TRANS_TABLES'",
             "SET SESSION `optimizer_switch` = DEFAULT",
             "SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE"
         ])
@@ -1414,12 +1413,14 @@ struct MySQLClientTests {
         #expect(preparedQueries.map(\.sql) == [
             "SELECT GET_LOCK(?, ?) AS lock_acquired",
             "SELECT RELEASE_LOCK(?) AS lock_released",
+            "SET SESSION `sql_mode` = ?",
             twoRowInsertSQL,
             oneRowInsertSQL
         ])
         #expect(preparedQueries.map(\.binds) == [
             ["echo-refresh", "5"],
             ["echo-refresh"],
+            ["ANSI,STRICT_TRANS_TABLES"],
             ["1", "PENELOPE", "2", "NICK"],
             ["3", "ED"]
         ])

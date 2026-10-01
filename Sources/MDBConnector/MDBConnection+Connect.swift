@@ -28,7 +28,11 @@ extension MDBConnection {
         handle = mysql
         _ = mysql_options(mysql, MYSQL_OPT_NONBLOCK, nil)
         setString(MYSQL_SET_CHARSET_NAME, "utf8mb4")
+        // echo-libraries builds every sign-in plugin in, so none is ever loaded from disk; a system
+        // Connector/C (Linux) loads some, such as caching_sha2_password, from its own directory.
+        #if canImport(Darwin)
         setString(MYSQL_PLUGIN_DIR, Self.noPluginDirectory)
+        #endif
         var timeout = UInt32(max(1, options.connectTimeoutSeconds))
         _ = mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, &timeout)
         try applyTLS(options)
