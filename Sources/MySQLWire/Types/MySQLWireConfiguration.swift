@@ -4,6 +4,9 @@ import Foundation
 public enum MySQLWireTLSMode: Sendable, Hashable {
     /// No TLS.
     case disabled
+    /// TLS when the server offers it, plain otherwise; the certificate is not checked (`PREFERRED`,
+    /// the default of MySQL's own client). Only for servers that may have no TLS at all.
+    case preferred
     /// Encrypt, but do not check the server's certificate (`REQUIRED`): works with the
     /// self-signed certificates MySQL and MariaDB generate at install.
     case required

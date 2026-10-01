@@ -8,18 +8,21 @@ import NIOSSL
 public actor MySQLWireConnection: MySQLConnectionSession {
     private let configuration: MySQLWireConfiguration
     private let logger: Logger
-    private let eventLoopGroup: MultiThreadedEventLoopGroup
     private var connection: MySQLConnection?
-    private var isClosed = false
+    private var closeRequested = false
 
     public static func connect(
         configuration: MySQLWireConfiguration,
         logger: Logger = Logger(label: "mysql-wire.connection")
     ) async throws -> MySQLWireConnection {
-        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        do {
-            let address = try SocketAddress.makeAddressResolvingHost(configuration.host, port: configuration.port)
-            let connection = try await MySQLConnection.connect(
+        // NIO's shared event loop group. A group of its own per connection costs a thread each, and on
+        // Linux a connection on a just-started group sometimes stalled in its handshake (about one in
+        // twenty under load) until the server gave up.
+        let eventLoopGroup = MultiThreadedEventLoopGroup.singleton
+        let address = try SocketAddress.makeAddressResolvingHost(configuration.host, port: configuration.port)
+        let eventLoop = eventLoopGroup.next()
+        let connection = try await withDeadline(seconds: configuration.connectTimeoutSeconds, host: configuration.host, on: eventLoop) {
+            MySQLConnection.connect(
                 to: address,
                 username: configuration.username,
                 database: configuration.database ?? "",
@@ -27,30 +30,62 @@ public actor MySQLWireConnection: MySQLConnectionSession {
                 tlsConfiguration: try Self.tlsConfiguration(for: configuration),
                 serverHostname: Self.serverName(for: configuration),
                 logger: logger,
-                on: eventLoopGroup.any()
-            ).get()
-            return MySQLWireConnection(
-                configuration: configuration,
-                logger: logger,
-                eventLoopGroup: eventLoopGroup,
-                connection: connection
+                on: eventLoop
             )
-        } catch {
-            try? await eventLoopGroup.shutdownGracefully()
-            throw error
         }
+        // mysql-nio carries on without TLS when the server offers none, whatever the mode; see
+        // ConnectionTests.requiredModesFailWhenTheServerHasNoTLS.
+        return MySQLWireConnection(
+            configuration: configuration,
+            logger: logger,
+            connection: connection
+        )
+    }
+
+    /// The connect future, failed after `seconds` (TCP connect, TLS and login together: a server
+    /// that accepts the connection and never answers would otherwise hang the caller). A connection
+    /// that completes after the deadline is closed.
+    private static func withDeadline(
+        seconds: Int,
+        host: String,
+        on eventLoop: any EventLoop,
+        _ connect: () throws -> EventLoopFuture<MySQLConnection>
+    ) async throws -> MySQLConnection {
+        let future = try connect()
+        guard seconds > 0 else { return try await future.get() }
+        let promise = eventLoop.makePromise(of: MySQLConnection.self)
+        let settled = NIOLoopBoundBox.makeBoxSendingValue(false, eventLoop: eventLoop)
+        let deadline = eventLoop.scheduleTask(in: .seconds(Int64(seconds))) {
+            guard !settled.value else { return }
+            settled.value = true
+            promise.fail(MySQLWireError.connectTimedOut(host: host, seconds: seconds))
+        }
+        future.whenComplete { result in
+            deadline.cancel()
+            guard !settled.value else {
+                // Too late: the caller has given up on it.
+                if case .success(let connection) = result { _ = connection.close() }
+                return
+            }
+            settled.value = true
+            promise.completeWith(result)
+        }
+        return try await promise.futureResult.get()
     }
 
     init(
         configuration: MySQLWireConfiguration,
         logger: Logger,
-        eventLoopGroup: MultiThreadedEventLoopGroup,
         connection: MySQLConnection
     ) {
         self.configuration = configuration
         self.logger = logger
-        self.eventLoopGroup = eventLoopGroup
         self.connection = connection
+    }
+
+    /// Closed by `close()`, or by the server or network (KILL, a restart, `wait_timeout`).
+    public var isClosed: Bool {
+        closeRequested || connection?.isClosed ?? true
     }
 
     public func simpleQuery(_ sql: String) async throws -> [MySQLRow] {
@@ -111,8 +146,8 @@ public actor MySQLWireConnection: MySQLConnectionSession {
     }
 
     public func close() async {
-        guard !isClosed else { return }
-        isClosed = true
+        guard !closeRequested else { return }
+        closeRequested = true
 
         if let connection {
             do {
@@ -122,16 +157,10 @@ public actor MySQLWireConnection: MySQLConnectionSession {
             }
             self.connection = nil
         }
-
-        do {
-            try await eventLoopGroup.shutdownGracefully()
-        } catch {
-            logger.warning("Failed to shut down MySQL event loop group: \(error.localizedDescription)")
-        }
     }
 
     private func requireConnection() throws -> MySQLConnection {
-        guard !isClosed, let connection else {
+        guard !closeRequested, let connection else {
             throw MySQLWireError.connectionAlreadyClosed
         }
         return connection
@@ -153,7 +182,7 @@ public actor MySQLWireConnection: MySQLConnectionSession {
         switch mode {
         case .disabled:
             return nil
-        case .required:
+        case .preferred, .required:
             tls.certificateVerification = .none
         case .verifyCA(let path):
             tls.certificateVerification = .noHostnameVerification

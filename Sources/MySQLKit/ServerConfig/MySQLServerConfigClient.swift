@@ -24,20 +24,17 @@ public struct MySQLServerConfigClient: Sendable {
         }
     }
 
+    /// Like `globalVariablesSQL`: SHOW takes no parameter markers.
+    static func globalStatusSQL(named variableName: String?) -> String {
+        guard let variableName, !variableName.isEmpty else { return "SHOW GLOBAL STATUS" }
+        let literal = variableName.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "''")
+        return "SHOW GLOBAL STATUS LIKE '\(literal)'"
+    }
+
     public func globalStatus(named variableName: String? = nil) async throws -> [MySQLStatusVariable] {
-        let sql: String
-        let binds: [MySQLData]
-
-        if let variableName, !variableName.isEmpty {
-            sql = "SHOW GLOBAL STATUS LIKE ?"
-            binds = [MySQLData(string: variableName)]
-        } else {
-            sql = "SHOW GLOBAL STATUS"
-            binds = []
-        }
-
+        let sql = Self.globalStatusSQL(named: variableName)
         let connection = try await serverConnection.activity()
-        let result = try await connection.query(sql, binds: binds)
+        let result = try await connection.query(sql, binds: [])
         return result.rows.compactMap { row in
             guard
                 let name = row.field("Variable_name")?.string,

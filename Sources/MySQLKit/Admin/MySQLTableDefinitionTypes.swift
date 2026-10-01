@@ -151,7 +151,7 @@ public enum MySQLInsertValue: Sendable {
     case null
     /// `ST_GeomFromText(?, srid)` from well-known text.
     case geometry(wkt: String, srid: Int? = nil)
-    /// `CAST(? AS JSON)` (MySQL); MariaDB stores JSON as text, so the value is bound as is there.
+    /// JSON text, bound as is: a JSON column parses it (MariaDB's JSON is LONGTEXT with a check).
     case json(String)
     /// `STRING_TO_VECTOR(?)` (MySQL 9) / `VEC_FromText(?)` (MariaDB 11.7).
     case vector([Float], mariaDB: Bool = false)
@@ -162,7 +162,8 @@ public enum MySQLInsertValue: Sendable {
         switch self {
         case .data, .null, .bits: "?"
         case .geometry(_, let srid): srid.map { "ST_GeomFromText(?, \($0))" } ?? "ST_GeomFromText(?)"
-        case .json: "CAST(? AS JSON)"
+        // A JSON column parses the bound text itself; MariaDB has no CAST … AS JSON (its JSON is LONGTEXT).
+        case .json: "?"
         case .vector(_, let mariaDB): mariaDB ? "VEC_FromText(?)" : "STRING_TO_VECTOR(?)"
         }
     }

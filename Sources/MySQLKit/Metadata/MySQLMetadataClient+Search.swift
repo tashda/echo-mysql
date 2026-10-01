@@ -1,6 +1,8 @@
 import MySQLWire
 
 public extension MySQLMetadataClient {
+    /// Tables, views, routines and triggers whose name matches `pattern`, a SQL `LIKE` pattern
+    /// (`%` for any run of characters, `_` for one): `"customer%"`, `"%order%"`.
     func searchObjects(matching pattern: String, schema: String? = nil) async throws -> [MySQLMetadataSearchResult] {
         let predicate: String
         let binds: [MySQLData]

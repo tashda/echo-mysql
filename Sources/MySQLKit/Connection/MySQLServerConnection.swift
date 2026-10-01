@@ -48,10 +48,24 @@ public actor MySQLServerConnection: Sendable {
     /// connect; without `opening`, two of them each opened a connection and the first, replaced,
     /// was never closed.
     private func shared(_ role: Role) async throws -> any MySQLConnectionSession {
-        switch role {
-        case .primary: if let primaryConnection { return primaryConnection }
-        case .metadata: if let metadataConnection { return metadataConnection }
-        case .activity: if let activityConnection { return activityConnection }
+        let cached: (any MySQLConnectionSession)? = switch role {
+        case .primary: primaryConnection
+        case .metadata: metadataConnection
+        case .activity: activityConnection
+        }
+        if let cached {
+            // A session the server ended (KILL, restart, wait_timeout) is replaced, so one lost
+            // connection does not fail every later call. Statements are never re-run: a call in
+            // flight when the connection was lost fails.
+            guard await cached.isClosed else { return cached }
+            logger.info("MySQL \(role) connection was closed; opening a new one")
+            await cached.close()
+            switch role {
+            case .primary: if primaryConnection.map({ $0 as AnyObject }) === (cached as AnyObject) { primaryConnection = nil }
+            case .metadata: if metadataConnection.map({ $0 as AnyObject }) === (cached as AnyObject) { metadataConnection = nil }
+            case .activity: if activityConnection.map({ $0 as AnyObject }) === (cached as AnyObject) { activityConnection = nil }
+            }
+            return try await shared(role)
         }
         if let pending = opening[role] { return try await pending.value }
         let factory = connectionFactory, configuration = configuration, logger = logger
@@ -109,25 +123,6 @@ public actor MySQLServerConnection: Sendable {
 
     public func failureAction(for error: any Error) -> MySQLConnectionFailureAction {
         healthPolicy.action(for: error)
-    }
-
-    public func preparedStatement(
-        for sql: String,
-        on connection: any MySQLConnectionSession
-    ) async throws -> PreparedStatementCache.Entry {
-        if let existing = await preparedStatementCache.entry(for: sql) {
-            _ = await preparedStatementCache.touch(sql, statementName: existing.statementName)
-            return existing
-        }
-
-        let statementName = "mw_stmt_fixed"
-        let escapedSQL = MySQLBindRenderer.escapeStringLiteral(sql)
-        _ = try await connection.simpleQuery("PREPARE \(statementName) FROM '\(escapedSQL)'")
-        if let evicted = await preparedStatementCache.touch(sql, statementName: statementName) {
-            _ = try? await connection.simpleQuery("DEALLOCATE PREPARE \(evicted.statementName)")
-        }
-        return await preparedStatementCache.entry(for: sql)
-            ?? PreparedStatementCache.Entry(sql: sql, statementName: statementName, lastAccessedAt: Date())
     }
 
     public func close() async {

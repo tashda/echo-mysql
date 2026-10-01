@@ -34,7 +34,7 @@ import MySQLWire
     @Test func insertWrapsTypedValues() {
         let sql = MySQLTableSQL.insert(schema: "s", table: "t", columns: ["g", "j", "v", "n"],
                                        row: [.geometry(wkt: "POINT(1 2)", srid: 4326), .json("{}"), .vector([1, 2]), .null])
-        #expect(sql == "INSERT INTO `s`.`t` (`g`, `j`, `v`, `n`) VALUES (ST_GeomFromText(?, 4326), CAST(? AS JSON), STRING_TO_VECTOR(?), ?)")
+        #expect(sql == "INSERT INTO `s`.`t` (`g`, `j`, `v`, `n`) VALUES (ST_GeomFromText(?, 4326), ?, STRING_TO_VECTOR(?), ?)")
     }
 }
 
@@ -82,6 +82,24 @@ import MySQLWire
     @Test func rolesNeedNoHost() {
         #expect(security.roleName("lab_reader", host: nil) == "'lab_reader'")
         #expect(security.roleName("lab_reader", host: "%") == "'lab_reader'@'%'")
+    }
+
+    @Test func defaultRoleFollowsTheServer() {
+        #expect(security.setDefaultRoleSQL("lab_reader", roleHost: "%", for: "app", host: "localhost", mariaDB: false)
+                == "SET DEFAULT ROLE 'lab_reader'@'%' TO 'app'@'localhost'")
+        #expect(security.setDefaultRoleSQL("lab_reader", roleHost: "%", for: "app", host: "localhost", mariaDB: true)
+                == "SET DEFAULT ROLE 'lab_reader' FOR 'app'@'localhost'")
+    }
+
+    @Test func backslashesAreEscapedUnlessNoBackslashEscapes() {
+        #expect(security.createUserSQL(username: "a\\b", host: "%", password: "p\\'w", authenticationPlugin: nil)
+                == "CREATE USER 'a\\\\b'@'%' IDENTIFIED BY 'p\\\\''w'")
+        #expect(security.createUserSQL(username: "a\\b", host: "%", password: "p\\'w", authenticationPlugin: nil,
+                                       backslashEscapes: false)
+                == "CREATE USER 'a\\b'@'%' IDENTIFIED BY 'p\\''w'")
+        #expect(security.roleName("r\\", host: "%") == "'r\\\\'@'%'")
+        #expect(MySQLTLSRequirement.subject("/CN=a\\b").clause(backslashEscapes: true) == " REQUIRE SUBJECT '/CN=a\\\\b'")
+        #expect(MySQLTLSRequirement.subject("/CN=a\\b").clause(backslashEscapes: false) == " REQUIRE SUBJECT '/CN=a\\b'")
     }
 }
 

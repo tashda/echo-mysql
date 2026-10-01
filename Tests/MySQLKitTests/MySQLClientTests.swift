@@ -257,44 +257,15 @@ struct MySQLClientTests {
 
     @Test
     func securityRolesReturnTypedResults() async throws {
-        let rolesSQL = """
-        SELECT
-            FROM_USER,
-            FROM_HOST
-        FROM mysql.role_edges
-        GROUP BY FROM_USER, FROM_HOST
-        ORDER BY FROM_USER, FROM_HOST;
-        """
-        let assignmentsSQL = """
-        SELECT
-            FROM_USER,
-            FROM_HOST,
-            TO_USER,
-            TO_HOST
-        FROM mysql.role_edges
-        ORDER BY TO_USER, FROM_USER;
-        """
-
         let metadata = MockConnectionSession(
-            preparedQueryResults: [
-                rolesSQL: MySQLWireQueryResult(
-                    rows: [
-                        Self.textRow([("FROM_USER", "app_readonly"), ("FROM_HOST", "%")]),
-                        Self.textRow([("FROM_USER", "app_admin"), ("FROM_HOST", "%")])
-                    ],
-                    metadata: nil
-                ),
-                assignmentsSQL: MySQLWireQueryResult(
-                    rows: [
-                        Self.textRow([
-                            ("FROM_USER", "app_readonly"),
-                            ("FROM_HOST", "%"),
-                            ("TO_USER", "echo"),
-                            ("TO_HOST", "%")
-                        ])
-                    ],
-                    metadata: nil
-                )
+            simpleQueryResults: [
+                "SELECT DISTINCT FROM_USER AS role_name, FROM_HOST AS role_host FROM mysql.role_edges ORDER BY FROM_USER, FROM_HOST": [
+                    Self.textRow([("role_name", "app_readonly"), ("role_host", "%")]),
+                    Self.textRow([("role_name", "app_admin"), ("role_host", "%")])
+                ],
+                "SELECT FROM_USER AS role_name, FROM_HOST AS role_host, TO_USER AS to_user, TO_HOST AS to_host FROM mysql.role_edges ORDER BY TO_USER, FROM_USER": [
+                    Self.textRow([("role_name", "app_readonly"), ("role_host", "%"), ("to_user", "echo"), ("to_host", "%")])
+                ]
             ]
         )
 
@@ -343,6 +314,7 @@ struct MySQLClientTests {
         JOIN information_schema.key_column_usage k
           ON k.constraint_name = t.constraint_name
          AND k.table_schema = t.table_schema
+         AND k.table_name = t.table_name
         WHERE t.table_schema = ?
           AND t.table_name = ?
           AND t.constraint_type = 'PRIMARY KEY'
@@ -669,7 +641,7 @@ struct MySQLClientTests {
     func transactionClientUsesPrimaryConnection() async throws {
         let primary = MockConnectionSession(
             simpleQueryResults: [
-                "SHOW MASTER STATUS": [
+                "SHOW BINARY LOG STATUS": [
                     Self.textRow([
                         ("File", "binlog.000001"),
                         ("Position", "157")
@@ -853,6 +825,9 @@ struct MySQLClientTests {
                         ("Replica_IO_Running", "Yes"),
                         ("Replica_SQL_Running", "Yes")
                     ])
+                ],
+                "SELECT FROM_USER AS role_name, FROM_HOST AS role_host, TO_USER AS to_user, TO_HOST AS to_host FROM mysql.role_edges ORDER BY TO_USER, FROM_USER": [
+                    Self.textRow([("role_name", "report_reader"), ("role_host", "%"), ("to_user", "echo"), ("to_host", "%")])
                 ]
             ],
             preparedQueryResults: [
@@ -976,7 +951,7 @@ struct MySQLClientTests {
         )
         let primary = MockConnectionSession(
             simpleQueryResults: [
-                "SHOW MASTER STATUS": [
+                "SHOW BINARY LOG STATUS": [
                     Self.textRow([
                         ("File", "binlog.000001"),
                         ("Position", "157")
@@ -1038,22 +1013,13 @@ struct MySQLClientTests {
     }
 
     @Test
-    func preparedQueriesUsePrepareExecuteLifecycle() async throws {
+    func boundQueriesUseTheBinaryProtocol() async throws {
         let sql = "SELECT * FROM actor WHERE actor_id = ? AND first_name = ?"
         let primary = MockConnectionSession(
-            simpleQueryResults: [
-                "PREPARE mw_stmt_fixed FROM 'SELECT * FROM actor WHERE actor_id = ? AND first_name = ?'": [],
-                "SET @mw_p1 = 7": [],
-                "SET @mw_p2 = 'PENELOPE'": [],
-                "EXECUTE mw_stmt_fixed USING @mw_p1, @mw_p2": [
-                    Self.textRow([
-                        ("actor_id", "7"),
-                        ("first_name", "PENELOPE")
-                    ])
-                ]
+            preparedQueryResults: [
+                sql: MySQLWireQueryResult(rows: [Self.textRow([("actor_id", "7"), ("first_name", "PENELOPE")])], metadata: nil)
             ]
         )
-
         let client = MySQLClient(
             configuration: MySQLConfiguration(host: "localhost", username: "root"),
             serverConnection: MySQLServerConnection(
@@ -1062,18 +1028,14 @@ struct MySQLClientTests {
             )
         )
 
-        let result = try await client.prepared.query(
-            sql,
-            binds: [MySQLData(int: 7), MySQLData(string: "PENELOPE")]
-        )
-        let recordedQueries = await primary.simpleQueries
+        let result = try await client.query(sql, binds: [MySQLData(int: 7), MySQLData(string: "PENELOPE")])
 
         #expect(result.rows.first?.column("actor_id")?.string == "7")
-        #expect(recordedQueries.count == 4)
-        #expect(recordedQueries.first == "PREPARE mw_stmt_fixed FROM 'SELECT * FROM actor WHERE actor_id = ? AND first_name = ?'")
-        #expect(recordedQueries.contains("SET @mw_p1 = '7'"))
-        #expect(recordedQueries.contains("SET @mw_p2 = 'PENELOPE'"))
-        #expect(recordedQueries.last == "EXECUTE mw_stmt_fixed USING @mw_p1, @mw_p2")
+        // The values travel separately from the SQL; nothing is spliced into a statement.
+        #expect(await primary.simpleQueries.isEmpty)
+        let prepared = await primary.preparedQueries
+        #expect(prepared.map(\.sql) == [sql])
+        #expect(prepared.first?.binds == ["7", "PENELOPE"])
     }
 
     @Test
@@ -1129,7 +1091,7 @@ struct MySQLClientTests {
         )
         let primary = MockConnectionSession(
             simpleQueryResults: [
-                "SHOW MASTER STATUS": [
+                "SHOW BINARY LOG STATUS": [
                     Self.textRow([
                         ("File", "binlog.000001"),
                         ("Position", "157")
@@ -1210,7 +1172,7 @@ struct MySQLClientTests {
 
         let metadata = MockConnectionSession(
             simpleQueryResults: [
-                "SHOW MASTER STATUS": [
+                "SHOW BINARY LOG STATUS": [
                     Self.textRow([("File", "binlog.000001"), ("Position", "1234")])
                 ]
             ],
@@ -1243,7 +1205,7 @@ struct MySQLClientTests {
         )
         let primary = MockConnectionSession(
             simpleQueryResults: [
-                "SHOW MASTER STATUS": [
+                "SHOW BINARY LOG STATUS": [
                     Self.textRow([
                         ("File", "binlog.000001"),
                         ("Position", "157")
@@ -1292,8 +1254,41 @@ struct MySQLClientTests {
             "ALTER USER 'ops'@'%' ACCOUNT UNLOCK",
             "GRANT 'report_reader' TO 'ops'@'%'",
             "REVOKE 'report_reader' FROM 'ops'@'%'",
+            "SELECT VERSION() AS version",
             "SET DEFAULT ROLE 'report_reader'@'%' TO 'ops'@'%'",
-            "SHOW MASTER STATUS"
+            "SELECT VERSION() AS version",
+            "SHOW BINARY LOG STATUS"
+        ])
+    }
+
+    @Test
+    func backslashEscapingFollowsTheSessionSQLMode() async throws {
+        func client(sqlMode: String) -> (MySQLClient, MockConnectionSession) {
+            let primary = MockConnectionSession(simpleQueryResults: [
+                "SELECT @@SESSION.sql_mode AS sql_mode": [Self.textRow([("sql_mode", sqlMode)])]
+            ])
+            let configuration = MySQLConfiguration(host: "localhost", username: "root")
+            let client = MySQLClient(
+                configuration: configuration,
+                serverConnection: MySQLServerConnection(configuration: configuration, connectionFactory: { _, _ in primary })
+            )
+            return (client, primary)
+        }
+
+        let (standard, standardPrimary) = client(sqlMode: "STRICT_TRANS_TABLES")
+        _ = try await standard.security.alterUserPassword(username: "ops", host: "%", password: "plain")
+        _ = try await standard.security.alterUserPassword(username: "ops", host: "%", password: "a\\b")
+        #expect(await standardPrimary.simpleQueries == [
+            "ALTER USER 'ops'@'%' IDENTIFIED BY 'plain'",
+            "SELECT @@SESSION.sql_mode AS sql_mode",
+            "ALTER USER 'ops'@'%' IDENTIFIED BY 'a\\\\b'"
+        ])
+
+        let (noBackslash, noBackslashPrimary) = client(sqlMode: "STRICT_TRANS_TABLES,NO_BACKSLASH_ESCAPES")
+        _ = try await noBackslash.security.alterUserPassword(username: "ops", host: "%", password: "a\\b")
+        #expect(await noBackslashPrimary.simpleQueries == [
+            "SELECT @@SESSION.sql_mode AS sql_mode",
+            "ALTER USER 'ops'@'%' IDENTIFIED BY 'a\\b'"
         ])
     }
 
@@ -1305,15 +1300,15 @@ struct MySQLClientTests {
         let primary = MockConnectionSession(
             databaseName: "sakila",
             simpleQueryResults: [
-                "SELECT CURRENT_USER() AS current_user": [
-                    Self.textRow([("current_user", "root@localhost")])
+                "SELECT CURRENT_USER() AS account": [
+                    Self.textRow([("account", "root@localhost")])
                 ],
                 "SHOW SESSION VARIABLES": [
                     Self.textRow([("Variable_name", "autocommit"), ("Value", "ON")]),
                     Self.textRow([("Variable_name", "sql_mode"), ("Value", "STRICT_TRANS_TABLES")])
                 ],
-                "SELECT @@SESSION.transaction_isolation AS transaction_isolation": [
-                    Self.textRow([("transaction_isolation", "READ COMMITTED")])
+                "SHOW SESSION VARIABLES WHERE Variable_name IN ('transaction_isolation', 'tx_isolation')": [
+                    Self.textRow([("Variable_name", "transaction_isolation"), ("Value", "READ-COMMITTED")])
                 ],
                 "SET SESSION `sql_mode` = 'ANSI,STRICT_TRANS_TABLES'": [],
                 "SET SESSION `optimizer_switch` = DEFAULT": [],
@@ -1411,10 +1406,10 @@ struct MySQLClientTests {
             "actor"
         ])
         #expect(await primary.simpleQueries == [
-            "SELECT CURRENT_USER() AS current_user",
+            "SELECT CURRENT_USER() AS account",
             "SHOW SESSION VARIABLES",
             "SHOW SESSION VARIABLES",
-            "SELECT @@SESSION.transaction_isolation AS transaction_isolation",
+            "SHOW SESSION VARIABLES WHERE Variable_name IN ('transaction_isolation', 'tx_isolation')",
             "SET SESSION `sql_mode` = 'ANSI,STRICT_TRANS_TABLES'",
             "SET SESSION `optimizer_switch` = DEFAULT",
             "SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE"

@@ -4,7 +4,7 @@ public extension MySQLSecurityClient {
 
     // MARK: - Password Policies
 
-    /// Loads password-policy-related global variables from performance_schema.
+    /// The password-policy global variables the server has.
     func passwordPolicyVariables() async throws -> [MySQLGlobalVariable] {
         let names = [
             "default_password_lifetime",
@@ -25,35 +25,19 @@ public extension MySQLSecurityClient {
             "authentication_policy"
         ]
 
-        let placeholders = names.map { _ in "?" }.joined(separator: ", ")
-        let sql = """
-        SELECT Variable_name, Value FROM performance_schema.global_variables
-        WHERE Variable_name IN (\(placeholders))
-        ORDER BY Variable_name
-        """
-
-        let connection = try await serverConnection.activity()
-        let result = try await connection.query(sql, binds: names.map { MySQLData(string: $0) })
-        return result.rows.compactMap { row in
-            guard
-                let name = row.field("Variable_name")?.string,
-                let value = row.field("Value")?.string
-            else { return nil }
-            return MySQLGlobalVariable(name: name, value: value)
-        }
+        return try await globalVariables(named: names)
     }
 
     // MARK: - Data Masking
 
     /// Returns `true` if the MySQL data masking component is installed.
     func maskingComponentInstalled() async throws -> Bool {
-        let sql = """
-        SELECT COUNT(*) AS cnt FROM information_schema.COMPONENTS
-        WHERE COMPONENT_URN LIKE '%data_masking%'
-        """
+        // MySQL lists loaded components in mysql.component; MariaDB has no components.
+        guard try await !isMariaDB() else { return false }
         let connection = try await serverConnection.activity()
-        let result = try await connection.query(sql, binds: [])
-        let count = result.rows.first?.field("cnt")?.string.flatMap(Int.init) ?? 0
+        let rows = try await connection.simpleQuery(
+            "SELECT COUNT(*) AS cnt FROM mysql.component WHERE component_urn LIKE '%data_masking%'")
+        let count = rows.first.flatMap { $0.field("cnt")?.int ?? $0.field("cnt")?.string.flatMap(Int.init) } ?? 0
         return count > 0
     }
 
@@ -85,7 +69,7 @@ public extension MySQLSecurityClient {
 
     // MARK: - Encryption
 
-    /// Loads encryption-related global variables from performance_schema.
+    /// The encryption global variables the server has.
     func encryptionVariables() async throws -> [MySQLGlobalVariable] {
         let names = [
             "innodb_encrypt_tables",
@@ -107,22 +91,7 @@ public extension MySQLSecurityClient {
             "tls_ciphersuites"
         ]
 
-        let placeholders = names.map { _ in "?" }.joined(separator: ", ")
-        let sql = """
-        SELECT Variable_name, Value FROM performance_schema.global_variables
-        WHERE Variable_name IN (\(placeholders))
-        ORDER BY Variable_name
-        """
-
-        let connection = try await serverConnection.activity()
-        let result = try await connection.query(sql, binds: names.map { MySQLData(string: $0) })
-        return result.rows.compactMap { row in
-            guard
-                let name = row.field("Variable_name")?.string,
-                let value = row.field("Value")?.string
-            else { return nil }
-            return MySQLGlobalVariable(name: name, value: value)
-        }
+        return try await globalVariables(named: names)
     }
 
     /// Lists tables that have ENCRYPTION in their CREATE_OPTIONS.
@@ -230,5 +199,19 @@ public extension MySQLSecurityClient {
                 mode: row.field("MODE")?.string ?? ""
             )
         }
+    }
+
+    /// The named global variables the server has. `SHOW GLOBAL VARIABLES` works on MySQL and
+    /// MariaDB alike (MySQL has them in performance_schema, MariaDB in information_schema). The
+    /// names are this file's constants, so they are written into the statement.
+    private func globalVariables(named names: [String]) async throws -> [MySQLGlobalVariable] {
+        let list = names.map { "'\($0)'" }.joined(separator: ", ")
+        let connection = try await serverConnection.activity()
+        let rows = try await connection.simpleQuery("SHOW GLOBAL VARIABLES WHERE Variable_name IN (\(list))")
+        return rows.compactMap { row in
+            guard let name = row.field("Variable_name")?.string, let value = row.field("Value")?.string else { return nil }
+            return MySQLGlobalVariable(name: name, value: value)
+        }
+        .sorted { $0.name < $1.name }
     }
 }

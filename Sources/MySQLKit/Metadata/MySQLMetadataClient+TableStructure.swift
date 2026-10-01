@@ -35,6 +35,7 @@ public extension MySQLMetadataClient {
         JOIN information_schema.key_column_usage k
           ON k.constraint_name = t.constraint_name
          AND k.table_schema = t.table_schema
+         AND k.table_name = t.table_name
         WHERE t.table_schema = ?
           AND t.table_name = ?
           AND t.constraint_type = 'PRIMARY KEY'

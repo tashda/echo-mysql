@@ -8,4 +8,10 @@ public protocol MySQLConnectionSession: Sendable {
     func currentDatabase() async throws -> String?
     func validate() async throws
     func close() async
+    /// Whether the session can no longer run statements (closed, or ended by the server).
+    var isClosed: Bool { get async }
+}
+
+public extension MySQLConnectionSession {
+    var isClosed: Bool { get async { false } }
 }

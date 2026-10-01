@@ -36,6 +36,7 @@ public extension MySQLSecurityClient {
         host: String,
         limits: MySQLAccountLimits
     ) async throws -> MySQLUserMutationResult {
+        let escapedLiteral = try await literalEscaper(for: [username, host])
         let statement = """
         ALTER USER '\(escapedLiteral(username))'@'\(escapedLiteral(host))' WITH \
         MAX_QUERIES_PER_HOUR \(limits.maxQueriesPerHour) \

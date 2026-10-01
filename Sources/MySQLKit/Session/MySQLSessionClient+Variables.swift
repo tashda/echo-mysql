@@ -4,8 +4,9 @@ import MySQLWire
 public extension MySQLSessionClient {
     func currentUser() async throws -> String? {
         let connection = try await serverConnection.primary()
-        let rows = try await connection.simpleQuery("SELECT CURRENT_USER() AS current_user")
-        return rows.first?.field("current_user")?.string
+        // CURRENT_USER is a reserved word, so it cannot be the column's alias.
+        let rows = try await connection.simpleQuery("SELECT CURRENT_USER() AS account")
+        return rows.first?.field("account")?.string
     }
 
     func currentDatabase() async throws -> String? {
@@ -36,7 +37,10 @@ public extension MySQLSessionClient {
     }
 
     func setSessionVariable(name: String, value: String?) async throws -> MySQLSessionVariable {
-        let renderedValue = value.map { "'\(MySQLBindRenderer.escapeStringLiteral($0))'" } ?? "DEFAULT"
+        // Numbers go unquoted: numeric variables refuse a string ("Incorrect argument type").
+        let renderedValue = value.map { value in
+            Self.isNumericLiteral(value) ? value : "'\(MySQLBindRenderer.escapeStringLiteral(value))'"
+        } ?? "DEFAULT"
         let connection = try await serverConnection.primary()
         _ = try await connection.simpleQuery("SET SESSION `\(escapedIdentifier(name))` = \(renderedValue)")
         let resolvedValue = value ?? "DEFAULT"
@@ -53,18 +57,28 @@ public extension MySQLSessionClient {
 
     func transactionIsolationLevel() async throws -> MySQLTransactionIsolationLevel? {
         let connection = try await serverConnection.primary()
+        // transaction_isolation on MySQL and MariaDB 11.1+; tx_isolation on older MariaDB.
         let rows = try await connection.simpleQuery(
-            "SELECT @@SESSION.transaction_isolation AS transaction_isolation"
+            "SHOW SESSION VARIABLES WHERE Variable_name IN ('transaction_isolation', 'tx_isolation')"
         )
-        guard let rawLevel = rows.first?.field("transaction_isolation")?.string else {
+        let values = Dictionary(rows.compactMap { row in
+            row.field("Variable_name")?.string.map { ($0, row.field("Value")?.string) }
+        }, uniquingKeysWith: { first, _ in first })
+        guard let rawLevel = (values["transaction_isolation"] ?? values["tx_isolation"]) ?? nil else {
             return nil
         }
-        return MySQLTransactionIsolationLevel(rawValue: rawLevel.uppercased())
+        // The variable reads REPEATABLE-READ; the statement and the enum say REPEATABLE READ.
+        return MySQLTransactionIsolationLevel(rawValue: rawLevel.uppercased().replacingOccurrences(of: "-", with: " "))
     }
 
     func setTransactionIsolationLevel(_ level: MySQLTransactionIsolationLevel) async throws {
         let connection = try await serverConnection.primary()
         _ = try await connection.simpleQuery("SET SESSION TRANSACTION ISOLATION LEVEL \(level.rawValue)")
+    }
+
+    private static func isNumericLiteral(_ value: String) -> Bool {
+        !value.isEmpty && value.allSatisfy { $0.isASCII && ($0.isNumber || $0 == "." || $0 == "-") }
+            && Double(value) != nil
     }
 
     private func escapedIdentifier(_ value: String) -> String {
