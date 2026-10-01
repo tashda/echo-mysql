@@ -33,11 +33,8 @@ struct ConnectionTests {
             let cipher = try await client.simpleQuery("SHOW SESSION STATUS LIKE 'Ssl_cipher'").first?.column("Value")?.string
             #expect(cipher?.isEmpty == false)
         } else {
-            // mysql-nio continues unencrypted when the server has no TLS. Refusing would break Echo's
-            // connections (TLS on by default) to such servers, so it waits for the new transport.
-            await withKnownIssue("REQUIRED and the VERIFY modes continue without TLS when the server offers none") {
-                await #expect(throws: (any Error).self) { _ = try await client.simpleQuery("SELECT 1") }
-            }
+            // REQUIRED never falls back to plaintext (fixed with MariaDB Connector/C).
+            await #expect(throws: (any Error).self) { _ = try await client.simpleQuery("SELECT 1") }
         }
     }
 

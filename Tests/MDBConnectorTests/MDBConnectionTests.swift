@@ -65,7 +65,7 @@ struct MDBConnectionTests {
     @Test func rowsComeInBatchesWithoutReadingAhead() async throws {
         let connection = try await LabServer.connect()
         defer { Task { await connection.close() } }
-        _ = try await connection.execute("SET SESSION cte_max_recursion_depth = 200000")
+        _ = try? await connection.execute("SET SESSION cte_max_recursion_depth = 200000") // MySQL; MariaDB allows it by default
         try await connection.send("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100000) SELECT i, REPEAT('x', 20) FROM n")
         var rows = 0, batches = 0, last = ""
         while let event = try await connection.nextEvent(maxRows: 500) {
