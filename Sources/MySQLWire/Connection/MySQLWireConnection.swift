@@ -152,6 +152,7 @@ public actor MySQLWireConnection: MySQLConnectionSession {
             tls.certificateVerification = .fullVerification
             if let path { tls.trustRoots = .file(path) }
         }
+        TLSKeyLog.apply(to: &tls)
         return tls
     }
 
