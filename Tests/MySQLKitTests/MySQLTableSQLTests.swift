@@ -90,3 +90,16 @@ import MySQLWire
         #expect(MySQLTableSQL.delete(schema: "s", table: "t", where: ["a": .null, "b": .data(MySQLData(int: 1))]).0 == "DELETE FROM `s`.`t` WHERE `a` = ? AND `b` = ?")
     }
 }
+
+@Suite struct MySQLServerStatementSQLTests {
+    @Test func variablePatternIsALiteral() {
+        #expect(MySQLServerConfigClient.globalVariablesSQL(named: "sql_mode") == "SHOW GLOBAL VARIABLES LIKE 'sql_mode'")
+        #expect(MySQLServerConfigClient.globalVariablesSQL(named: "it's") == "SHOW GLOBAL VARIABLES LIKE 'it''s'")
+        #expect(MySQLServerConfigClient.globalVariablesSQL(named: nil) == "SHOW GLOBAL VARIABLES")
+    }
+
+    @Test func slowLogOrdersByStartTime() {
+        #expect(MySQLErrorLogClient.tableLogSQL(named: "slow_log", limit: 5) == "SELECT * FROM mysql.`slow_log` ORDER BY start_time DESC LIMIT 5")
+        #expect(MySQLErrorLogClient.tableLogSQL(named: "general_log", limit: 5) == "SELECT * FROM mysql.`general_log` ORDER BY event_time DESC LIMIT 5")
+    }
+}

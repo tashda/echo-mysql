@@ -3,20 +3,16 @@ import MySQLWire
 public struct MySQLServerConfigClient: Sendable {
     let serverConnection: MySQLServerConnection
 
+    /// SHOW takes no parameter markers, so the pattern (a name, or a LIKE pattern) is a literal.
+    static func globalVariablesSQL(named variableName: String?) -> String {
+        guard let variableName, !variableName.isEmpty else { return "SHOW GLOBAL VARIABLES" }
+        let literal = variableName.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "''")
+        return "SHOW GLOBAL VARIABLES LIKE '\(literal)'"
+    }
+
     public func globalVariables(named variableName: String? = nil) async throws -> [MySQLGlobalVariable] {
-        let sql: String
-        let binds: [MySQLData]
-
-        if let variableName, !variableName.isEmpty {
-            sql = "SHOW GLOBAL VARIABLES LIKE ?"
-            binds = [MySQLData(string: variableName)]
-        } else {
-            sql = "SHOW GLOBAL VARIABLES"
-            binds = []
-        }
-
         let connection = try await serverConnection.activity()
-        let result = try await connection.query(sql, binds: binds)
+        let result = try await connection.query(Self.globalVariablesSQL(named: variableName), binds: [])
         return result.rows.compactMap { row in
             guard
                 let name = row.field("Variable_name")?.string,
