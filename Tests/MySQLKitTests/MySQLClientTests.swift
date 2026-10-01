@@ -1,6 +1,4 @@
 import Logging
-import MySQLWire
-import NIOCore
 import Testing
 @testable import MySQLKit
 
@@ -34,11 +32,9 @@ actor MockConnectionSession: MySQLConnectionSession {
         return preparedQueryResults[sql, default: MySQLWireQueryResult(rows: [], metadata: nil)]
     }
 
-    func stream(_ sql: String) async throws -> AsyncThrowingStream<MySQLRow, Error> {
+    func stream(_ sql: String) async throws -> MySQLRowStream {
         simpleQueries.append(sql)
-        return AsyncThrowingStream { continuation in
-            continuation.finish()
-        }
+        return MySQLRowStream(rows: [])
     }
 
     func changeDatabase(_ database: String) async throws {
@@ -1410,7 +1406,6 @@ struct MySQLClientTests {
             "SHOW SESSION VARIABLES",
             "SHOW SESSION VARIABLES",
             "SHOW SESSION VARIABLES WHERE Variable_name IN ('transaction_isolation', 'tx_isolation')",
-            "SET SESSION `sql_mode` = 'ANSI,STRICT_TRANS_TABLES'",
             "SET SESSION `optimizer_switch` = DEFAULT",
             "SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE"
         ])
@@ -1418,12 +1413,14 @@ struct MySQLClientTests {
         #expect(preparedQueries.map(\.sql) == [
             "SELECT GET_LOCK(?, ?) AS lock_acquired",
             "SELECT RELEASE_LOCK(?) AS lock_released",
+            "SET SESSION `sql_mode` = ?",
             twoRowInsertSQL,
             oneRowInsertSQL
         ])
         #expect(preparedQueries.map(\.binds) == [
             ["echo-refresh", "5"],
             ["echo-refresh"],
+            ["ANSI,STRICT_TRANS_TABLES"],
             ["1", "PENELOPE", "2", "NICK"],
             ["3", "ED"]
         ])
@@ -1676,43 +1673,33 @@ struct MySQLClientTests {
     }
 
     private static func textRow(_ values: [(String, String?)]) -> MySQLRow {
-        let columnDefinitions = values.map { name, _ in columnDefinition(named: name) }
+        MySQLRow(textColumns: values.map { (name: $0.0, value: $0.1) })
+    }
+}
 
-        let rowValues = values.map { _, value -> ByteBuffer? in
-            guard let value else { return nil }
-            var buffer = ByteBufferAllocator().buffer(capacity: value.utf8.count)
-            buffer.writeString(value)
-            return buffer
-        }
-
-        return MySQLRow(format: .text, columnDefinitions: columnDefinitions, values: rowValues)
+@Suite("MySQL type names and placeholders")
+struct MySQLTypeNameAndPlaceholderTests {
+    @Test func sqlTypeNames() {
+        #expect(MySQLColumn(name: "a", type: .longlong, flags: .unsigned).sqlTypeName == "BIGINT UNSIGNED")
+        #expect(MySQLColumn(name: "a", type: .long).sqlTypeName == "INT")
+        #expect(MySQLColumn(name: "a", type: .newdecimal, decimals: 30, length: 67).sqlTypeName == "DECIMAL(65,30)")
+        #expect(MySQLColumn(name: "a", type: .newdecimal, decimals: 2, length: 12).sqlTypeName == "DECIMAL(10,2)")
+        #expect(MySQLColumn(name: "a", type: .varString).sqlTypeName == "VARCHAR")
+        #expect(MySQLColumn(name: "a", type: .varString, characterSet: 63).sqlTypeName == "VARBINARY")
+        #expect(MySQLColumn(name: "a", type: .string, flags: .enum).sqlTypeName == "ENUM")
+        #expect(MySQLColumn(name: "a", type: .blob).sqlTypeName == "TEXT")
+        #expect(MySQLColumn(name: "a", type: .blob, characterSet: 63).sqlTypeName == "BLOB")
+        #expect(MySQLColumn(name: "a", type: .bit, length: 1).sqlTypeName == "BIT")
+        #expect(MySQLColumn(name: "a", type: .bit, length: 64).sqlTypeName == "BIT(64)")
+        #expect(MySQLColumn(name: "a", type: .datetime).sqlTypeName == "DATETIME")
+        #expect(MySQLColumn(name: "a", type: .json).sqlTypeName == "JSON")
     }
 
-    private static func columnDefinition(named name: String) -> MySQLProtocol.ColumnDefinition41 {
-        var payload = ByteBufferAllocator().buffer(capacity: 64)
-        writeLengthEncodedString("def", into: &payload)
-        writeLengthEncodedString("test", into: &payload)
-        writeLengthEncodedString("test", into: &payload)
-        writeLengthEncodedString("test", into: &payload)
-        writeLengthEncodedString(name, into: &payload)
-        writeLengthEncodedString(name, into: &payload)
-        payload.writeInteger(UInt8(0x0c))
-        payload.writeInteger(MySQLProtocol.CharacterSet.utf8mb4.rawValue)
-        payload.writeInteger(UInt8(0))
-        payload.writeInteger(UInt32(255), endianness: .little)
-        payload.writeInteger(MySQLProtocol.DataType.varString.rawValue)
-        payload.writeInteger(UInt16(0), endianness: .little)
-        payload.writeInteger(UInt8(0))
-        payload.writeInteger(UInt16(0))
-
-        var packet = MySQLPacket(payload: payload)
-        return try! packet.decode(MySQLProtocol.ColumnDefinition41.self, capabilities: [])
-    }
-
-    private static func writeLengthEncodedString(_ value: String, into buffer: inout ByteBuffer) {
-        let utf8Count = value.utf8.count
-        precondition(utf8Count < 251)
-        buffer.writeInteger(UInt8(utf8Count))
-        buffer.writeString(value)
+    @Test func placeholdersOutsideLiteralsAndComments() throws {
+        let sql = "SELECT ?, '?', \"?\", `?`, 'it''s ?' -- ?\n, ? /* ? */ # ?\n, ?"
+        #expect(MySQLPlaceholders.positions(in: sql).count == 3)
+        #expect(try MySQLPlaceholders.render("SELECT ?, ?", literals: ["1", "'a'"]) == "SELECT 1, 'a'")
+        #expect(throws: MySQLWireError.self) { _ = try MySQLPlaceholders.render("SELECT ?", literals: []) }
+        #expect(MySQLPlaceholders.positions(in: "SELECT 'a\\'?' , ?").count == 1)
     }
 }

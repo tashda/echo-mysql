@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLSecurityClient {
     func listUsers() async throws -> [MySQLUserAccount] {

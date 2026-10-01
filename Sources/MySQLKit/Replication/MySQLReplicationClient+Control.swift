@@ -1,4 +1,3 @@
-import MySQLWire
 
 /// The replica's view of replication, from `SHOW REPLICA STATUS` (MySQL and MariaDB names).
 public struct MySQLReplicaState: Sendable, Hashable {

@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLAdminClient {
     func createDatabase(name: String, characterSet: String? = nil, collation: String? = nil, ifNotExists: Bool = false) async throws {

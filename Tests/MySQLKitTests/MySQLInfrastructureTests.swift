@@ -1,7 +1,6 @@
 import Foundation
 import MySQLKit
 import MySQLKitTesting
-import MySQLWire
 import Testing
 
 struct MySQLInfrastructureTests {

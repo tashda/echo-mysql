@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLMetadataClient {
     func listColumns(in table: String, schema: String? = nil) async throws -> [MySQLColumnInfo] {

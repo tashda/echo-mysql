@@ -4,6 +4,14 @@ import MySQLKitTesting
 import Testing
 
 /// Connecting, queries, binds, streaming and what happens when a connection is lost.
+/// Linux runs on the system's Connector/C (Ubuntu's, with GnuTLS), which can't interrupt a statement
+/// over TLS or refuse a plaintext RSA key fetch (tashda/mysql-wire#3); Echo ships on macOS only.
+#if os(Linux)
+let systemConnectorOnLinux = true
+#else
+let systemConnectorOnLinux = false
+#endif
+
 @Suite(.testServer)
 struct ConnectionTests {
     @Test func connectsAndQueries() async throws {
@@ -33,11 +41,8 @@ struct ConnectionTests {
             let cipher = try await client.simpleQuery("SHOW SESSION STATUS LIKE 'Ssl_cipher'").first?.column("Value")?.string
             #expect(cipher?.isEmpty == false)
         } else {
-            // mysql-nio continues unencrypted when the server has no TLS. Refusing would break Echo's
-            // connections (TLS on by default) to such servers, so it waits for the new transport.
-            await withKnownIssue("REQUIRED and the VERIFY modes continue without TLS when the server offers none") {
-                await #expect(throws: (any Error).self) { _ = try await client.simpleQuery("SELECT 1") }
-            }
+            // REQUIRED never falls back to plaintext (fixed with MariaDB Connector/C).
+            await #expect(throws: (any Error).self) { _ = try await client.simpleQuery("SELECT 1") }
         }
     }
 
@@ -174,6 +179,38 @@ struct ConnectionTests {
         }
     }
 
+    /// Lost with a transaction open: reported once, and calls fail until `reconnect()`, so no
+    /// statement silently runs outside the transaction the user thinks is open.
+    @Test func aConnectionLostInATransactionWaitsForReconnect() async throws {
+        let server = try TestServer.require()
+        try await server.withClient { client in
+            #expect(await client.checkConnection() == nil)
+            _ = try await client.simpleQuery("START TRANSACTION")
+            let id = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            try await server.withClient { admin in _ = try await admin.simpleQuery("KILL CONNECTION \(id)") }
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(await client.checkConnection() == MySQLConnectionLoss(transactionLost: true))
+            #expect(await client.checkConnection() == nil)
+            await #expect(throws: MySQLWireError.self) { _ = try await client.simpleQuery("SELECT 1") }
+            try await client.reconnect()
+            #expect(await !client.isInTransaction)
+            let newID = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            #expect(newID != id)
+        }
+    }
+
+    /// Lost with nothing open: reported, and the next call opens a new connection.
+    @Test func anIdleConnectionLostIsReportedAndReplaced() async throws {
+        let server = try TestServer.require()
+        try await server.withClient { client in
+            let id = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            try await server.withClient { admin in _ = try await admin.simpleQuery("KILL CONNECTION \(id)") }
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(await client.checkConnection() == MySQLConnectionLoss(transactionLost: false))
+            #expect(try await client.simpleQuery("SELECT 1 AS v").first?.column("v")?.int == 1)
+        }
+    }
+
     @Test func cancelQueryStopsALongStatement() async throws {
         let server = try TestServer.require()
         try await server.withClient { client in
@@ -186,6 +223,76 @@ struct ConnectionTests {
             _ = try? await sleeping
             #expect(ContinuousClock.now - started < .seconds(10))
             #expect(try await client.simpleQuery("SELECT 2 AS v").first?.column("v")?.int == 2)
+        }
+    }
+
+    /// Echo's Force Stop: the statement ends at once, the open transaction is reported (and rolled
+    /// back by the server), and the next call gets a new connection.
+    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/mysql-wire#3"))
+    func closeRunningConnectionStopsAStatementInATransaction() async throws {
+        let server = try TestServer.require()
+        try await server.withClient { client in
+            #expect(await !client.isInTransaction)
+            _ = try await client.simpleQuery("START TRANSACTION")
+            #expect(await client.isInTransaction)
+            let id = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            let started = ContinuousClock.now
+            let sleeping = Task { try await client.simpleQuery("SELECT SLEEP(30)") }
+            try await Task.sleep(for: .milliseconds(500))
+            let outcome = await client.closeRunningConnection()
+            #expect(outcome.closed && outcome.transactionWasOpen)
+            await #expect(throws: (any Error).self) { _ = try await sleeping.value }
+            #expect(ContinuousClock.now - started < .seconds(5))
+            #expect(await !client.isInTransaction)
+            let newID = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            #expect(newID != id)
+        }
+    }
+
+    /// A cancelled task ends its statement and its connection; the next call gets a new one.
+    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/mysql-wire#3"))
+    func cancellingARunningCallReplacesTheConnection() async throws {
+        let server = try TestServer.require()
+        try await server.withClient { client in
+            let id = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            let sleeping = Task { try await client.simpleQuery("SELECT SLEEP(30)") }
+            try await Task.sleep(for: .milliseconds(500))
+            sleeping.cancel()
+            await #expect(throws: (any Error).self) { _ = try await sleeping.value }
+            let newID = try #require(try await client.simpleQuery("SELECT CONNECTION_ID() AS id").first?.column("id")?.int)
+            #expect(newID != id)
+        }
+    }
+
+    /// Decision D18: a `caching_sha2_password` full sign-in without TLS fails rather than fetch the
+    /// server's RSA key in plaintext, and works with the key from a file the user chose.
+    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/mysql-wire#3"))
+    func cachingSHA2WithoutTLSNeedsAKeyFile() async throws {
+        let server = try TestServer.require()
+        try await server.withClient { admin in
+            guard try await admin.serverFlavor().isMySQL else { return }
+            let user = TestServer.uniqueName("sha2")
+            defer { Task { _ = try? await server.withClient { try await $0.security.dropUser(username: user, host: "%") } } }
+            _ = try await admin.security.createUser(username: user, host: "%", password: "Sha2-Password1", authenticationPlugin: "caching_sha2_password")
+
+            let plain = server.client(server.configuration(username: user, password: .some("Sha2-Password1"), tlsMode: .disabled))
+            do {
+                _ = try await plain.simpleQuery("SELECT 1")
+                Issue.record("signed in without TLS")
+            } catch {
+                #expect(error.localizedDescription.contains("needs TLS"))
+            }
+            await plain.close()
+
+            let key = try #require(try await admin.simpleQuery("SHOW STATUS LIKE 'Caching_sha2_password_rsa_public_key'").first?.column("Value")?.string)
+            let keyFile = FileManager.default.temporaryDirectory.appendingPathComponent("\(user).pem")
+            try key.write(to: keyFile, atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: keyFile) }
+            var configuration = server.configuration(username: user, password: .some("Sha2-Password1"), tlsMode: .disabled)
+            configuration.serverPublicKeyPath = keyFile.path
+            let withKey = server.client(configuration)
+            #expect(try await withKey.simpleQuery("SELECT 1 AS v").first?.column("v")?.int == 1)
+            await withKey.close()
         }
     }
 

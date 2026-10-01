@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLMetadataClient {
     func tableOptions(for table: String, schema: String? = nil) async throws -> MySQLTableOptionsInfo? {

@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLSecurityClient {
     /// Every role that is granted to an account or another role. MySQL keeps the grants in

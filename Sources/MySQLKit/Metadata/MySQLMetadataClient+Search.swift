@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLMetadataClient {
     /// Tables, views, routines and triggers whose name matches `pattern`, a SQL `LIKE` pattern

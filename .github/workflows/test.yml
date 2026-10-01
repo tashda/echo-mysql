@@ -25,6 +25,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: apt-get update -qq && apt-get install -y -qq libmariadb-dev pkg-config
       - name: Build library
         run: swift build
       - name: Build tests
@@ -38,6 +40,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: apt-get update -qq && apt-get install -y -qq libmariadb-dev pkg-config
       - name: Run unit tests
         run: swift test --skip MySQLIntegrationTests
 
@@ -81,6 +85,8 @@ jobs:
       MYSQL_TEST_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: apt-get update -qq && apt-get install -y -qq libmariadb-dev pkg-config
       - name: Run integration tests against ${{ matrix.name }}
         # Serially: on Linux, with every suite in parallel, about one connect in a thousand stalled
         # before the server's greeting (TESTING.md, known issues). Serial runs take ~10 seconds.
@@ -99,6 +105,8 @@ jobs:
           - { name: "MariaDB 11.8", image: "mariadb:11.8", ping: "mariadb-admin" }
     steps:
       - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: sudo apt-get -o DPkg::Lock::Timeout=300 update -qq && sudo apt-get -o DPkg::Lock::Timeout=300 install -y -qq libmariadb-dev pkg-config
       - name: Swift
         run: swift --version
       - name: Certificates (a private CA, a server certificate for localhost, a client certificate)
@@ -152,6 +160,8 @@ jobs:
             follow: "CHANGE MASTER TO MASTER_HOST='source', MASTER_USER='root', MASTER_PASSWORD='Test-Password1', MASTER_USE_GTID=slave_pos; START SLAVE; SET GLOBAL read_only=ON;"
     steps:
       - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: sudo apt-get -o DPkg::Lock::Timeout=300 update -qq && sudo apt-get -o DPkg::Lock::Timeout=300 install -y -qq libmariadb-dev pkg-config
       - name: Swift
         run: swift --version
       - name: Start a source and a replica following it
@@ -184,6 +194,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: sudo apt-get -o DPkg::Lock::Timeout=300 update -qq && sudo apt-get -o DPkg::Lock::Timeout=300 install -y -qq libmariadb-dev pkg-config
       - name: Swift
         run: swift --version
       - name: Start MySQL 8.4 behind Toxiproxy

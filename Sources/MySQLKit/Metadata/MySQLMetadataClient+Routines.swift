@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLMetadataClient {
     func listRoutines(in schema: String? = nil) async throws -> [MySQLRoutineInfo] {

@@ -1,6 +1,5 @@
 import Testing
 @testable import MySQLKit
-import MySQLWire
 
 @Suite struct MySQLTableSQLTests {
     @Test func columnsCarryEveryAttribute() {
