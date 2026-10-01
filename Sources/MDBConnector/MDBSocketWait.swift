@@ -1,3 +1,6 @@
+#if canImport(Glibc)
+import Glibc
+#endif
 import Dispatch
 
 /// The connection's queue (decision D10): on Apple platforms also the actor's executor, so
@@ -20,6 +23,7 @@ struct MDBSocketReadiness: OptionSet, Sendable {
 /// The deadline passed before the socket was ready.
 struct MDBSocketTimeout: Error {}
 
+#if canImport(Darwin)
 /// One wait for socket readiness (decision D10): DispatchSources on the connection's own queue, so
 /// Connector/C is only touched there, and no thread blocks while the socket is quiet.
 ///
@@ -74,27 +78,20 @@ final class MDBSocketWait: Sendable {
         // The sources live only inside the lock; making, starting and cancelling them never
         // blocks, and their handlers run later, on the connection's queue.
         state.withLock { state in
-            #if canImport(Darwin)
-            let sourceQueue = queue
-            #else
-            // Linux: the actor doesn't run on the connection's queue (Dispatch has no serial-queue
-            // executor there) and that queue isn't Sendable, so each wait's sources get their own.
-            let sourceQueue = DispatchQueue(label: "mdb-socket-wait")
-            #endif
             if events.contains(.readable) {
-                let source = DispatchSource.makeReadSource(fileDescriptor: socket, queue: sourceQueue)
+                let source = DispatchSource.makeReadSource(fileDescriptor: socket, queue: queue)
                 source.setEventHandler { [self] in finish(.success(.readable)) }
                 state.sources.append(source)
             }
             if events.contains(.writable) {
-                let source = DispatchSource.makeWriteSource(fileDescriptor: socket, queue: sourceQueue)
+                let source = DispatchSource.makeWriteSource(fileDescriptor: socket, queue: queue)
                 source.setEventHandler { [self] in finish(.success(.writable)) }
                 state.sources.append(source)
             }
             if let deadline {
                 let remaining = ContinuousClock.now.duration(to: deadline)
                 let nanoseconds = max(0, remaining.components.seconds * 1_000_000_000 + remaining.components.attoseconds / 1_000_000_000)
-                let timer = DispatchSource.makeTimerSource(queue: sourceQueue)
+                let timer = DispatchSource.makeTimerSource(queue: queue)
                 timer.schedule(deadline: .now() + .nanoseconds(Int(nanoseconds)))
                 timer.setEventHandler { [self] in finish(.failure(MDBSocketTimeout())) }
                 state.sources.append(timer)
@@ -151,3 +148,53 @@ final class MDBSocketWait: Sendable {
         }
     }
 }
+#else
+/// Linux (package CI only; Echo runs on macOS): Dispatch's types aren't Sendable there, so instead
+/// of sources the wait checks the socket with `poll` (never blocking) and sleeps a little between
+/// checks, from 50 µs up to 5 ms. Nothing holds the descriptor, so a close needs only the loop to
+/// notice its abort.
+final class MDBSocketWait: Sendable {
+    private let abortError = Mutex<(any Error)?>(nil)
+    private let ended = Mutex(false)
+
+    static func wait(
+        socket: Int32,
+        for events: MDBSocketReadiness,
+        on queue: MDBConnectionQueue,
+        deadline: ContinuousClock.Instant?
+    ) async throws -> MDBSocketReadiness {
+        try await MDBSocketWait().run(socket: socket, for: events, on: queue, deadline: deadline)
+    }
+
+    func run(
+        socket: Int32,
+        for events: MDBSocketReadiness,
+        on queue: MDBConnectionQueue,
+        deadline: ContinuousClock.Instant?
+    ) async throws -> MDBSocketReadiness {
+        defer { ended.withLock { $0 = true } }
+        var pause: Duration = .microseconds(50)
+        let wanted = (events.contains(.readable) ? Int32(POLLIN) : 0) | (events.contains(.writable) ? Int32(POLLOUT) : 0)
+        while true {
+            if let error = abortError.withLock({ $0 }) { throw error }
+            try Task.checkCancellation()
+            var descriptor = pollfd(fd: socket, events: Int16(wanted), revents: 0)
+            if poll(&descriptor, 1, 0) > 0 {
+                var ready: MDBSocketReadiness = []
+                if descriptor.revents & Int16(Int32(POLLIN) | Int32(POLLHUP) | Int32(POLLERR)) != 0 { ready.insert(.readable) }
+                if descriptor.revents & Int16(Int32(POLLOUT)) != 0 { ready.insert(.writable) }
+                return ready.isEmpty ? events : ready
+            }
+            if let deadline, ContinuousClock.now >= deadline { throw MDBSocketTimeout() }
+            try await Task.sleep(for: pause)
+            pause = min(pause * 2, .milliseconds(5))
+        }
+    }
+
+    /// Ends the wait with `error` (the connection is closing) and returns once the loop has stopped.
+    func abort(with error: any Error) async {
+        abortError.withLock { $0 = error }
+        while !ended.withLock({ $0 }) { try? await Task.sleep(for: .milliseconds(1)) }
+    }
+}
+#endif
