@@ -49,6 +49,18 @@ import MySQLWire
         #expect(security.createUserSQL(username: "app", host: "%", password: nil, authenticationPlugin: nil) == "CREATE USER 'app'@'%'")
     }
 
+    @Test func mariaDBPluginPasswordUsesVia() {
+        #expect(security.createUserSQL(username: "app", host: "%", password: "pw", authenticationPlugin: "ed25519", mariaDB: true)
+                == "CREATE USER 'app'@'%' IDENTIFIED VIA ed25519 USING PASSWORD('pw')")
+        #expect(security.createUserSQL(username: "app", host: "%", password: "pw", authenticationPlugin: nil, mariaDB: true)
+                == "CREATE USER 'app'@'%' IDENTIFIED BY 'pw'")
+    }
+
+    @Test func pluginInstallNamesItsLibrary() {
+        #expect(security.installPluginSQL(name: "ed25519", library: "auth_ed25519")
+                == "INSTALL PLUGIN `ed25519` SONAME 'auth_ed25519'")
+    }
+
     @Test func rolesNeedNoHost() {
         #expect(security.roleName("lab_reader", host: nil) == "'lab_reader'")
         #expect(security.roleName("lab_reader", host: "%") == "'lab_reader'@'%'")

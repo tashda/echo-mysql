@@ -5,17 +5,23 @@ public extension MySQLSecurityClient {
         password: String? = nil,
         authenticationPlugin: String? = nil
     ) async throws -> MySQLUserMutationResult {
+        // MariaDB words a plugin with a password differently, so only then ask which server this is.
+        let mariaDB = authenticationPlugin?.isEmpty == false && password != nil ? try await isMariaDB() : false
         try await executeSecurityStatement(createUserSQL(username: username, host: host, password: password,
-                                                        authenticationPlugin: authenticationPlugin))
+                                                        authenticationPlugin: authenticationPlugin, mariaDB: mariaDB))
         return MySQLUserMutationResult(username: username, host: host, operation: "CREATE USER")
     }
 
     /// `IDENTIFIED BY` needs `IDENTIFIED` also without a plugin; it was left out, so a user with a
-    /// password and no plugin could not be created.
-    internal func createUserSQL(username: String, host: String, password: String?, authenticationPlugin: String?) -> String {
+    /// password and no plugin could not be created. MariaDB takes a plugin's password as
+    /// `IDENTIFIED VIA plugin USING PASSWORD('…')` (`ed25519`, `parsec`, `mysql_native_password`).
+    internal func createUserSQL(username: String, host: String, password: String?, authenticationPlugin: String?,
+                                mariaDB: Bool = false) -> String {
         var statement = "CREATE USER '\(escapedLiteral(username))'@'\(escapedLiteral(host))'"
         let plugin = authenticationPlugin.flatMap { $0.isEmpty ? nil : $0 }
         switch (plugin, password) {
+        case let (plugin?, password?) where mariaDB:
+            statement += " IDENTIFIED VIA \(plugin) USING PASSWORD('\(escapedLiteral(password))')"
         case let (plugin?, password?): statement += " IDENTIFIED WITH \(plugin) BY '\(escapedLiteral(password))'"
         case let (plugin?, nil): statement += " IDENTIFIED WITH \(plugin)"
         case let (nil, password?): statement += " IDENTIFIED BY '\(escapedLiteral(password))'"
@@ -122,6 +128,12 @@ public extension MySQLSecurityClient {
         try await executeSecurityStatement(
             "SET DEFAULT ROLE '\(escapedLiteral(roleName))'@'\(escapedLiteral(roleHost))' TO '\(escapedLiteral(username))'@'\(escapedLiteral(host))'"
         )
+    }
+
+    func isMariaDB() async throws -> Bool {
+        let connection = try await serverConnection.primary()
+        let rows = try await connection.simpleQuery("SELECT VERSION() AS version")
+        return MySQLReplicationClient.ServerFlavor(version: rows.first?.field("version")?.string ?? "").isMariaDB
     }
 
     func executeSecurityStatement(_ sql: String) async throws {
