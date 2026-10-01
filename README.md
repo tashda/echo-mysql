@@ -1,27 +1,33 @@
 # mysql-wire
 
-A Swift package providing a typed MySQL client for macOS and iOS applications. Built on top of [mysql-nio](https://github.com/vapor/mysql-nio), it offers a high-level, namespaced API for MySQL database operations.
+A typed MySQL and MariaDB client for Swift on **MariaDB Connector/C**. Echo uses it for every MySQL
+and MariaDB connection.
 
 ## Modules
 
-- **MySQLWire** — Low-level connection management and query execution, wrapping mysql-nio.
-- **MySQLKit** — High-level typed client with namespaced APIs for metadata, admin, security, replication, performance, and session management.
-- **MySQLKitTesting** — Test-server URL parsing and the `.testServer` Swift Testing trait (see TESTING.md).
+- **MDBConnector**: the transport, and the only code that calls Connector/C. Each connection is an
+  actor on its own serial queue, driving Connector/C's non-blocking API (`*_start`/`*_cont`) and woken
+  by socket readiness, so no thread ever blocks while the server works.
+- **MySQLKit**: the client Echo calls, with namespaced APIs for metadata, admin, security, replication,
+  performance and sessions; streaming results (`events`, pulled from the server as read); cancel
+  (`KILL QUERY`) and Force Stop; imports through `LOAD DATA LOCAL` (`importRows`); the TLS options for
+  `mysqldump`/`mysql` (`toolTLS`).
+- **MySQLKitTesting**: test-server URL parsing and the `.testServer` Swift Testing trait (TESTING.md).
+
+Connector/C comes from [echo-libraries](https://github.com/tashda/echo-libraries) on macOS (a universal
+framework with OpenSSL; every sign-in plugin built in, none loaded from disk) and from the system on
+Linux (`libmariadb-dev`). It is LGPL-2.1, linked dynamically and unmodified.
 
 ## Requirements
 
-- Swift 6.2+
-- macOS 13+ / iOS 16+
+- Swift 6.2, macOS 26.
+- Linux: `libmariadb-dev` and `pkg-config`.
 
 ## Usage
-
-Add the package dependency:
 
 ```swift
 .package(url: "https://github.com/tashda/mysql-wire.git", branch: "dev")
 ```
-
-Then import `MySQLKit` (it re-exports `MySQLWire`):
 
 ```swift
 import MySQLKit
@@ -35,24 +41,24 @@ let client = MySQLClient(configuration: MySQLConfiguration(
     tlsMode: .verifyIdentity()
 ))
 
-// Typed metadata API
 let tables = try await client.metadata.listTables(in: "mydb")
 
-// Statements with parameters go through the binary protocol
+// Parameters are escaped by the connection (its character set and NO_BACKSLASH_ESCAPES); results
+// always come as the server's text.
 let rows = try await client.query("SELECT * FROM users WHERE id = ?", binds: [MySQLData(int: 42)]).rows
 
 await client.close()
 ```
 
 TLS modes follow MySQL's `--ssl-mode`: `.disabled`, `.preferred` (TLS when the server offers it),
-`.required`, `.verifyCA(caCertificatePath:)` and `.verifyIdentity(caCertificatePath:)`. A server that
-offers no TLS is still connected to unencrypted in every mode (see TESTING.md, known issues).
+`.required` (refuses a server without TLS), `.verifyCA(caCertificatePath:)` and
+`.verifyIdentity(caCertificatePath:)` (the Mac's trusted CAs when no CA is given). Connector/C checks
+chain and host name together, so Verify CA behaves as Verify Identity (decision D19).
 
 ## Testing
 
 ```bash
-docker run -d --name mysql-test -e MYSQL_ROOT_PASSWORD=Test-Password1 -p 3306:3306 mysql:8.4
-MYSQL_TEST_URL='mysql://root:Test-Password1@127.0.0.1:3306/' swift test
+swift run --package-path ../echo-server-lab serverlab run --recipe mysql-8.4-empty -- swift test --no-parallel
 ```
 
 Without `MYSQL_TEST_URL` only the unit tests run. [TESTING.md](TESTING.md) lists every variable
@@ -60,4 +66,4 @@ Without `MYSQL_TEST_URL` only the unit tests run. [TESTING.md](TESTING.md) lists
 
 ## License
 
-Private — all rights reserved.
+Private — all rights reserved. MariaDB Connector/C is under the LGPL-2.1.

@@ -114,18 +114,13 @@ each test.
 
 Tests mark these with `withKnownIssue`; when one is fixed its test fails, and the marker goes.
 
-- mysql-nio's `MySQLData.string` is nil for `DECIMAL` and temporal values that arrive through the
-  binary protocol (statements with binds); `DataTests.columnTypesRoundTrip`.
 - A connection that goes silent after login is not detected: statements have no deadline and the
   configuration's `keepAliveInterval` is not used; `FaultTests.silentLinkAfterLoginIsDetected`.
-- `REQUIRED` and the `VERIFY_*` modes connect unencrypted when the server offers no TLS (mysql-nio
-  falls back; refusing would break Echo's default connections to such servers);
-  `ConnectionTests.requiredModesFailWhenTheServerHasNoTLS`.
-- On Linux, with every suite running in parallel, about one connect in a thousand stalls before the
-  server's greeting arrives and fails after `connectTimeoutSeconds`; serial runs and macOS are clean.
-  CI runs the integration suites with `--no-parallel` until the new transport replaces mysql-nio.
-- Logins mysql-wire cannot do yet (they live in Vapor's mysql-nio): `caching_sha2_password` full
-  authentication without TLS, `sha256_password`, MariaDB `client_ed25519` and `parsec`.
+
+Closed by the switch to MariaDB Connector/C: DECIMAL and temporal values with binds, `REQUIRED`
+without server TLS (now refused), the Linux connect stall, and the `sha256_password`, `client_ed25519`
+and `parsec` logins. `caching_sha2_password` full authentication without TLS is refused by design
+(decision D18) unless `serverPublicKeyPath` names the server's key.
 
 ## CI
 
