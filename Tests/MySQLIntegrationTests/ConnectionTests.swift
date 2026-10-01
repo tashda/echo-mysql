@@ -254,6 +254,37 @@ struct ConnectionTests {
         }
     }
 
+    /// Decision D18: a `caching_sha2_password` full sign-in without TLS fails rather than fetch the
+    /// server's RSA key in plaintext, and works with the key from a file the user chose.
+    @Test func cachingSHA2WithoutTLSNeedsAKeyFile() async throws {
+        let server = try TestServer.require()
+        try await server.withClient { admin in
+            guard try await admin.serverFlavor().isMySQL else { return }
+            let user = TestServer.uniqueName("sha2")
+            defer { Task { _ = try? await server.withClient { try await $0.security.dropUser(username: user, host: "%") } } }
+            _ = try await admin.security.createUser(username: user, host: "%", password: "Sha2-Password1", authenticationPlugin: "caching_sha2_password")
+
+            let plain = server.client(server.configuration(username: user, password: .some("Sha2-Password1"), tlsMode: .disabled))
+            do {
+                _ = try await plain.simpleQuery("SELECT 1")
+                Issue.record("signed in without TLS")
+            } catch {
+                #expect(error.localizedDescription.contains("needs TLS"))
+            }
+            await plain.close()
+
+            let key = try #require(try await admin.simpleQuery("SHOW STATUS LIKE 'Caching_sha2_password_rsa_public_key'").first?.column("Value")?.string)
+            let keyFile = FileManager.default.temporaryDirectory.appendingPathComponent("\(user).pem")
+            try key.write(to: keyFile, atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: keyFile) }
+            var configuration = server.configuration(username: user, password: .some("Sha2-Password1"), tlsMode: .disabled)
+            configuration.serverPublicKeyPath = keyFile.path
+            let withKey = server.client(configuration)
+            #expect(try await withKey.simpleQuery("SELECT 1 AS v").first?.column("v")?.int == 1)
+            await withKey.close()
+        }
+    }
+
     @Test func closedClientCanBeUsedAgain() async throws {
         let server = try TestServer.require()
         let client = server.client()

@@ -5,7 +5,7 @@ import Testing
 
 /// A server that requires TLS (`MYSQL_TEST_TLS_URL`). Tests that need the CA or a client
 /// certificate return early when the URL has none (`ssl-ca`, `ssl-cert`, `ssl-key`).
-@Suite(.testServer(TestServer.tlsVariable))
+@Suite(.testServer(TestServer.tlsVariable), .enabled(if: LabTLSRecipe.requiresTLSWithAGoodCertificate))
 struct TLSTests {
     /// A CA that signed nothing on any test server: verifying against it must fail.
     static let unrelatedCA = """
@@ -53,7 +53,7 @@ struct TLSTests {
         try await server.withClient { client async throws in
             #expect(try await !Self.cipher(client).isEmpty)
             let version = try await client.simpleQuery("SHOW SESSION STATUS LIKE 'Ssl_version'").first?.column("Value")?.string
-            #expect(version?.hasPrefix("TLSv1.") == true)
+            #expect(version?.hasPrefix(LabTLSRecipe.isStrict ? "TLSv1.3" : "TLSv1.") == true)
         }
     }
 

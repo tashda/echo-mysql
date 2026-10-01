@@ -24,6 +24,8 @@ public actor MDBConnection {
     var currentFields: [MDBField] = []
     /// Where reading the results of the statement(s) sent stands.
     var phase: Phase = .idle
+    /// The data `LOAD DATA LOCAL INFILE` may read (decision D17).
+    let localInfile = MDBLocalInfileSlot()
     /// Whether a transaction was open when the connection closed (the server rolls it back).
     public private(set) var closedWithTransactionOpen = false
 

@@ -9,6 +9,19 @@ extension MDBConnection {
     /// A path that never exists: no client plugin is ever loaded from disk (all are built in).
     static let noPluginDirectory = "/var/empty/echo-no-plugins"
 
+    /// Decision D18: without TLS, `caching_sha2_password` and `sha256_password` full sign-ins
+    /// encrypt the password with the server's RSA key, which Connector/C fetches in plaintext
+    /// unless it has a key file (a man in the middle could hand it their own). Pointing it at this
+    /// file, which holds no key, makes those sign-ins fail instead, as MySQL's own client does.
+    /// A key file the user chose replaces it.
+    static let needsTLSOrKeyFile = "This account signs in with caching_sha2_password or sha256_password, which needs TLS to send the password safely. Turn on TLS for this connection, or choose the server's public key file."
+
+    static let noServerKeyFile: String = {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("echo-no-server-public-key.pem")
+        try? Data("Echo never fetches a server's RSA key in plaintext (no key file was chosen).\n".utf8).write(to: url)
+        return url.path
+    }()
+
     func open(_ options: MDBConnectOptions) async throws {
         guard handle == nil else { throw MDBError(.notReady, message: "The connection is already open.") }
         guard let mysql = mysql_init(nil) else { throw MDBError(.connectFailed, message: "Connector/C could not allocate a connection.") }
@@ -21,11 +34,12 @@ extension MDBConnection {
         try applyTLS(options)
         var localInfile = UInt32(options.allowLocalInfile ? 1 : 0)
         _ = mysql_options(mysql, MYSQL_OPT_LOCAL_INFILE, &localInfile)
+        installLocalInfileHandler()
         if options.compress { _ = mysql_options(mysql, MYSQL_OPT_COMPRESS, nil) }
         var cleartext: CChar
         if case .verifyIdentity = options.tls, options.allowCleartextPassword { cleartext = 1 } else { cleartext = 0 }
         _ = mysql_options(mysql, MYSQL_ENABLE_CLEARTEXT_PLUGIN, &cleartext)
-        if let key = options.serverPublicKeyPath { setString(MYSQL_SERVER_PUBLIC_KEY, key) }
+        setString(MYSQL_SERVER_PUBLIC_KEY, options.serverPublicKeyPath ?? Self.noServerKeyFile)
 
         // Connector/C keeps these pointers until the connect is done.
         let host = options.unixSocket == nil ? strdup(options.host) : nil
@@ -53,7 +67,11 @@ extension MDBConnection {
             throw error
         }
         guard connected != nil else {
-            let failure = self.error(.connectFailed)
+            var failure = self.error(.connectFailed)
+            // The sign-in plugin stopped at the placeholder key file (D18); Connector/C has no words for it.
+            if failure.code == 2000, tlsCipher == nil, options.serverPublicKeyPath == nil {
+                failure = MDBError(.connectFailed, code: 2061, sqlState: failure.sqlState, message: Self.needsTLSOrKeyFile)
+            }
             await close()
             throw failure
         }

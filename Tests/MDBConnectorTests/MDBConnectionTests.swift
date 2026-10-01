@@ -151,6 +151,31 @@ struct MDBConnectionTests {
         await #expect(throws: MDBError.self) { try await connection.send("SELECT 1") }
     }
 
+    /// Decision D17: with LOAD DATA LOCAL allowed, the server still can't read the Mac's files;
+    /// only data handed to `loadLocal` is ever sent.
+    @Test func localInfileServesNoFiles() async throws {
+        let admin = try await LabServer.connect()
+        defer { Task { await admin.close() } }
+        let before = try await admin.execute("SELECT @@GLOBAL.local_infile").compactMap(\.rows).first?.first?.string(0) ?? "0"
+        _ = try await admin.execute("SET GLOBAL local_infile = 1")
+        defer { Task { _ = try? await admin.execute("SET GLOBAL local_infile = \(before)") } }
+        _ = try await admin.execute("CREATE DATABASE IF NOT EXISTS mdb_tests")
+        var options = LabServer.options
+        options.database = "mdb_tests"
+        options.allowLocalInfile = true
+        let connection = try await MDBConnection.connect(options)
+        defer { Task { await connection.close() } }
+        _ = try await connection.execute("CREATE TEMPORARY TABLE infile_rows (line TEXT)")
+        await #expect(throws: MDBError.self) {
+            _ = try await connection.execute("LOAD DATA LOCAL INFILE '/etc/hosts' INTO TABLE infile_rows")
+        }
+        let loaded = try await connection.loadLocal("LOAD DATA LOCAL INFILE 'mine' INTO TABLE infile_rows", name: "mine", data: Data("a\nb\n".utf8))
+        #expect(loaded.affectedRows == 2)
+        await #expect(throws: MDBError.self) {
+            _ = try await connection.loadLocal("LOAD DATA LOCAL INFILE '/etc/hosts' INTO TABLE infile_rows", name: "mine", data: Data("x\n".utf8))
+        }
+    }
+
     @Test func aKilledConnectionIsNoticedWhileIdle() async throws {
         let connection = try await LabServer.connect()
         let killer = try await LabServer.connect()

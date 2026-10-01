@@ -153,7 +153,7 @@ public actor MySQLWireConnection: MySQLConnectionSession {
     }
 
     /// Rows of an earlier statement nobody read are read away first.
-    private func prepare() async throws {
+    func prepare() async throws {
         guard await connection.isOpen else { throw MySQLWireError.connectionAlreadyClosed }
         if await connection.isBusy { await connection.drain() }
     }
