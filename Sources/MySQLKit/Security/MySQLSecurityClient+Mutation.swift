@@ -69,33 +69,38 @@ public extension MySQLSecurityClient {
         )
     }
 
-    func createRole(name: String, host: String = "%") async throws {
-        try await executeSecurityStatement("CREATE ROLE '\(escapedLiteral(name))'@'\(escapedLiteral(host))'")
+    /// Creates a role. Without a host it works on MySQL (`'name'@'%'`) and MariaDB (whose roles have no host).
+    func createRole(name: String, host: String? = nil) async throws {
+        try await executeSecurityStatement("CREATE ROLE \(roleName(name, host: host))")
     }
 
-    func dropRole(name: String, host: String = "%") async throws {
-        try await executeSecurityStatement("DROP ROLE '\(escapedLiteral(name))'@'\(escapedLiteral(host))'")
+    func dropRole(name: String, host: String? = nil) async throws {
+        try await executeSecurityStatement("DROP ROLE \(roleName(name, host: host))")
+    }
+
+    internal func roleName(_ name: String, host: String?) -> String {
+        "'\(escapedLiteral(name))'" + (host.map { "@'\(escapedLiteral($0))'" } ?? "")
     }
 
     func grantRole(
         _ roleName: String,
-        roleHost: String = "%",
+        roleHost: String? = nil,
         to username: String,
         host: String
     ) async throws {
         try await executeSecurityStatement(
-            "GRANT '\(escapedLiteral(roleName))'@'\(escapedLiteral(roleHost))' TO '\(escapedLiteral(username))'@'\(escapedLiteral(host))'"
+            "GRANT \(self.roleName(roleName, host: roleHost)) TO '\(escapedLiteral(username))'@'\(escapedLiteral(host))'"
         )
     }
 
     func revokeRole(
         _ roleName: String,
-        roleHost: String = "%",
+        roleHost: String? = nil,
         from username: String,
         host: String
     ) async throws {
         try await executeSecurityStatement(
-            "REVOKE '\(escapedLiteral(roleName))'@'\(escapedLiteral(roleHost))' FROM '\(escapedLiteral(username))'@'\(escapedLiteral(host))'"
+            "REVOKE \(self.roleName(roleName, host: roleHost)) FROM '\(escapedLiteral(username))'@'\(escapedLiteral(host))'"
         )
     }
 
