@@ -85,15 +85,12 @@ public extension MySQLBulkOperationClient {
 }
 
 public extension MySQLBulkOperationClient {
-    /// Updates the rows whose columns equal the given values (`WHERE a = ? AND b = ?`). Returns the
-    /// statement's affected-row count as MySQL reports it.
-    @discardableResult
+    /// Updates the rows whose columns equal the given values (`WHERE a = ? AND b = ?`).
     func updateRows(in table: String, schema: String, set values: [String: MySQLInsertValue],
-                    where conditions: [String: MySQLInsertValue]) async throws -> Int {
+                    where conditions: [String: MySQLInsertValue]) async throws {
         let (sql, binds) = MySQLTableSQL.update(schema: schema, table: table, set: values, where: conditions)
         let connection = try await serverConnection.primary()
         _ = try await connection.query(sql, binds: binds)
-        return 0
     }
 
     /// Deletes the rows whose columns equal the given values. An empty condition is refused.
