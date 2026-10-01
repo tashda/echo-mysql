@@ -24,13 +24,15 @@ public struct MySQLBackupRestoreClient: Sendable {
         username: String,
         database: String,
         outputPath: String,
-        options: MySQLDumpOptions
+        options: MySQLDumpOptions,
+        tlsArguments: [String] = []
     ) -> [String] {
         var command = [
             "mysqldump",
             "--host=\(host)",
             "--port=\(port)",
             "--user=\(username)",
+        ] + tlsArguments + [
             "--result-file=\(outputPath)",
         ]
 
@@ -80,14 +82,15 @@ public struct MySQLBackupRestoreClient: Sendable {
         database: String,
         inputPath: String,
         defaultCharacterSet: String? = nil,
-        force: Bool = false
+        force: Bool = false,
+        tlsArguments: [String] = []
     ) -> [String] {
         var command = [
             "mysql",
             "--host=\(host)",
             "--port=\(port)",
             "--user=\(username)",
-        ]
+        ] + tlsArguments
 
         if let defaultCharacterSet, !defaultCharacterSet.isEmpty {
             command.append("--default-character-set=\(defaultCharacterSet)")
