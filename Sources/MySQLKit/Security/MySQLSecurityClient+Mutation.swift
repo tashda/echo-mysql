@@ -53,16 +53,17 @@ public extension MySQLSecurityClient {
         return MySQLUserMutationResult(username: username, host: host, operation: "UNLOCK USER")
     }
 
+    /// Grants to a user (`'name'@'host'`) or, with no host, to a role (MariaDB roles have no host).
     func grant(
         _ privilege: String,
         on object: String,
         to username: String,
-        host: String,
+        host: String?,
         withGrantOption: Bool = false
     ) async throws {
         let grantOptionClause = withGrantOption ? " WITH GRANT OPTION" : ""
         try await executeSecurityStatement(
-            "GRANT \(privilege) ON \(object) TO '\(escapedLiteral(username))'@'\(escapedLiteral(host))'\(grantOptionClause)"
+            "GRANT \(privilege) ON \(object) TO \(roleName(username, host: host))\(grantOptionClause)"
         )
     }
 
@@ -70,10 +71,10 @@ public extension MySQLSecurityClient {
         _ privilege: String,
         on object: String,
         from username: String,
-        host: String
+        host: String?
     ) async throws {
         try await executeSecurityStatement(
-            "REVOKE \(privilege) ON \(object) FROM '\(escapedLiteral(username))'@'\(escapedLiteral(host))'"
+            "REVOKE \(privilege) ON \(object) FROM \(roleName(username, host: host))"
         )
     }
 
