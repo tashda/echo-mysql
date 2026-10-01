@@ -71,6 +71,10 @@ public extension MySQLClient {
         MySQLConstraintClient(serverConnection: serverConnection)
     }
 
+    var scripts: MySQLScriptClient {
+        MySQLScriptClient(serverConnection: serverConnection)
+    }
+
     var executionPlan: MySQLExecutionPlanClient {
         MySQLExecutionPlanClient(serverConnection: serverConnection)
     }
