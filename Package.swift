@@ -34,7 +34,10 @@ let package = Package(
         ),
         .target(
             name: "MySQLKitTesting",
-            dependencies: ["MySQLKit"]
+            dependencies: [
+                "MySQLKit",
+                .product(name: "Logging", package: "swift-log"),
+            ]
         ),
         .testTarget(
             name: "MySQLWireTests",
@@ -45,6 +48,12 @@ let package = Package(
             name: "MySQLKitTests",
             dependencies: ["MySQLKit", "MySQLKitTesting"],
             path: "Tests/MySQLKitTests"
+        ),
+        // Against a real server (Tests/with-lab.sh, or MYSQL_* in CI); skipped without one.
+        .testTarget(
+            name: "MySQLIntegrationTests",
+            dependencies: ["MySQLKit", "MySQLKitTesting"],
+            path: "Tests/MySQLIntegrationTests"
         ),
     ],
     swiftLanguageModes: [.v6]

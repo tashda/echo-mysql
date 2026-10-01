@@ -74,21 +74,4 @@ struct MySQLInfrastructureTests {
         }
         #expect(await counter.opened == 1)
     }
-
-    @Test
-    func testConfigurationBuildsFixtureConfiguration() {
-        let testConfiguration = MySQLTestConfiguration(
-            host: "db.internal",
-            port: 3307,
-            username: "echo",
-            password: "secret",
-            database: "sakila"
-        )
-
-        let fixture = MySQLFixture(configuration: testConfiguration.mysqlConfiguration)
-
-        #expect(fixture.configuration.host == "db.internal")
-        #expect(fixture.configuration.port == 3307)
-        #expect(fixture.configuration.database == "sakila")
-    }
 }
