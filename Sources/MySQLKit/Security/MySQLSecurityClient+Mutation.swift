@@ -1,14 +1,39 @@
+/// What TLS an account must log in with (`REQUIRE …`).
+public enum MySQLTLSRequirement: Sendable, Hashable {
+    case none
+    /// Any encrypted connection (`REQUIRE SSL`).
+    case ssl
+    /// A client certificate signed by a CA the server trusts (`REQUIRE X509`).
+    case x509
+    /// A client certificate with this subject, e.g. `/CN=lab_cert_user` (`REQUIRE SUBJECT`).
+    case subject(String)
+    /// A client certificate issued by this issuer (`REQUIRE ISSUER`).
+    case issuer(String)
+
+    var clause: String {
+        func quoted(_ text: String) -> String { "'" + text.replacingOccurrences(of: "'", with: "''") + "'" }
+        switch self {
+        case .none: return ""
+        case .ssl: return " REQUIRE SSL"
+        case .x509: return " REQUIRE X509"
+        case .subject(let subject): return " REQUIRE SUBJECT \(quoted(subject))"
+        case .issuer(let issuer): return " REQUIRE ISSUER \(quoted(issuer))"
+        }
+    }
+}
+
 public extension MySQLSecurityClient {
     func createUser(
         username: String,
         host: String,
         password: String? = nil,
-        authenticationPlugin: String? = nil
+        authenticationPlugin: String? = nil,
+        tls: MySQLTLSRequirement = .none
     ) async throws -> MySQLUserMutationResult {
         // MariaDB words a plugin with a password differently, so only then ask which server this is.
         let mariaDB = authenticationPlugin?.isEmpty == false && password != nil ? try await isMariaDB() : false
         try await executeSecurityStatement(createUserSQL(username: username, host: host, password: password,
-                                                        authenticationPlugin: authenticationPlugin, mariaDB: mariaDB))
+                                                        authenticationPlugin: authenticationPlugin, mariaDB: mariaDB) + tls.clause)
         return MySQLUserMutationResult(username: username, host: host, operation: "CREATE USER")
     }
 

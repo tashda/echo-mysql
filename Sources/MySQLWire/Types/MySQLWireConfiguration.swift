@@ -22,6 +22,10 @@ public struct MySQLWireConfiguration: Sendable, Hashable {
     public let tlsMode: MySQLWireTLSMode
     public let connectTimeoutSeconds: Int
     public let keepAliveInterval: Duration?
+    /// A client certificate (PEM) and its key (PEM) for accounts created `REQUIRE X509` or
+    /// `REQUIRE SUBJECT`. Only used with TLS.
+    public let clientCertificatePath: String?
+    public let clientKeyPath: String?
 
     /// True unless TLS is disabled.
     public var useTLS: Bool { tlsMode != .disabled }
@@ -34,7 +38,9 @@ public struct MySQLWireConfiguration: Sendable, Hashable {
         database: String? = nil,
         tlsMode: MySQLWireTLSMode,
         connectTimeoutSeconds: Int = 10,
-        keepAliveInterval: Duration? = .seconds(300)
+        keepAliveInterval: Duration? = .seconds(300),
+        clientCertificatePath: String? = nil,
+        clientKeyPath: String? = nil
     ) {
         self.host = host
         self.port = port
@@ -44,6 +50,8 @@ public struct MySQLWireConfiguration: Sendable, Hashable {
         self.tlsMode = tlsMode
         self.connectTimeoutSeconds = connectTimeoutSeconds
         self.keepAliveInterval = keepAliveInterval
+        self.clientCertificatePath = clientCertificatePath
+        self.clientKeyPath = clientKeyPath
     }
 
     /// `useTLS: true` verifies chain and host name against the system roots (`.verifyIdentity()`).

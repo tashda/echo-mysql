@@ -56,6 +56,12 @@ import MySQLWire
                 == "CREATE USER 'app'@'%' IDENTIFIED BY 'pw'")
     }
 
+    @Test func tlsRequirementClauses() {
+        #expect(MySQLTLSRequirement.x509.clause == " REQUIRE X509")
+        #expect(MySQLTLSRequirement.subject("/CN=o'k").clause == " REQUIRE SUBJECT '/CN=o''k'")
+        #expect(MySQLTLSRequirement.none.clause == "")
+    }
+
     @Test func pluginInstallNamesItsLibrary() {
         #expect(security.installPluginSQL(name: "ed25519", library: "auth_ed25519")
                 == "INSTALL PLUGIN `ed25519` SONAME 'auth_ed25519'")

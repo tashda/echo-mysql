@@ -24,7 +24,7 @@ public actor MySQLWireConnection: MySQLConnectionSession {
                 username: configuration.username,
                 database: configuration.database ?? "",
                 password: configuration.password,
-                tlsConfiguration: Self.tlsConfiguration(for: configuration.tlsMode),
+                tlsConfiguration: try Self.tlsConfiguration(for: configuration),
                 serverHostname: Self.serverName(for: configuration),
                 logger: logger,
                 on: eventLoopGroup.any()
@@ -135,6 +135,16 @@ public actor MySQLWireConnection: MySQLConnectionSession {
             throw MySQLWireError.connectionAlreadyClosed
         }
         return connection
+    }
+
+    /// The TLS mode's settings plus the client certificate, when one is configured.
+    static func tlsConfiguration(for configuration: MySQLWireConfiguration) throws -> TLSConfiguration? {
+        guard var tls = tlsConfiguration(for: configuration.tlsMode) else { return nil }
+        if let certificatePath = configuration.clientCertificatePath, let keyPath = configuration.clientKeyPath {
+            tls.certificateChain = try NIOSSLCertificate.fromPEMFile(certificatePath).map { .certificate($0) }
+            tls.privateKey = .privateKey(try NIOSSLPrivateKey(file: keyPath, format: .pem))
+        }
+        return tls
     }
 
     /// NIOSSL settings for a TLS mode; nil when TLS is disabled.

@@ -21,10 +21,15 @@ struct MySQLWireConfigurationTests {
         #expect(MySQLWireConfiguration(host: "h", username: "u", useTLS: false).tlsMode == .disabled)
     }
 
-    @Test func requiredDoesNotVerify() {
+    @Test func requiredDoesNotVerify() throws {
         #expect(MySQLWireConnection.tlsConfiguration(for: .required)?.certificateVerification == CertificateVerification.none)
         #expect(MySQLWireConnection.tlsConfiguration(for: .verifyCA(caCertificatePath: "/ca.pem"))?.certificateVerification == .noHostnameVerification)
         #expect(MySQLWireConnection.tlsConfiguration(for: .disabled) == nil)
+        // A client certificate only matters with TLS; a missing file is an error, not a silent skip.
+        let plain = MySQLWireConfiguration(host: "h", username: "u", tlsMode: .disabled, clientCertificatePath: "/nope.pem", clientKeyPath: "/nope.key")
+        #expect(try MySQLWireConnection.tlsConfiguration(for: plain) == nil)
+        let missing = MySQLWireConfiguration(host: "h", username: "u", tlsMode: .required, clientCertificatePath: "/nope.pem", clientKeyPath: "/nope.key")
+        #expect(throws: (any Error).self) { try MySQLWireConnection.tlsConfiguration(for: missing) }
     }
 
     @Test func addressesAreNotSentAsServerName() {
