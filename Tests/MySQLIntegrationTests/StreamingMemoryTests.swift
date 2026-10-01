@@ -1,3 +1,4 @@
+#if canImport(Darwin)
 import Darwin
 import Foundation
 import MySQLKit
@@ -42,3 +43,4 @@ struct StreamingMemoryTests {
         }
     }
 }
+#endif

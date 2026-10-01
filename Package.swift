@@ -2,6 +2,18 @@
 
 import PackageDescription
 
+// echo-libraries ships Apple-only binary frameworks; on Linux SwiftPM must not even fetch it (its
+// binary download crashes there), so the dependency and its products exist on macOS only.
+#if os(macOS)
+let echoLibraries: [Package.Dependency] = [.package(url: "https://github.com/tashda/echo-libraries", from: "1.1.0")]
+let connectorProducts: [Target.Dependency] = [.product(name: "CMariaDB", package: "echo-libraries")]
+let tlsProducts: [Target.Dependency] = [.product(name: "EchoTLS", package: "echo-libraries")]
+#else
+let echoLibraries: [Package.Dependency] = []
+let connectorProducts: [Target.Dependency] = []
+let tlsProducts: [Target.Dependency] = []
+#endif
+
 let package = Package(
     name: "mysql-wire",
     platforms: [
@@ -14,9 +26,8 @@ let package = Package(
     dependencies: [
         // MariaDB Connector/C (macOS: the universal framework built by echo-libraries; Linux: the
         // system's libmariadb), and on macOS the Keychain trust and client certificates (EchoTLS).
-        .package(url: "https://github.com/tashda/echo-libraries", from: "1.1.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
-    ],
+    ] + echoLibraries,
     targets: [
         // The system's MariaDB Connector/C on Linux (libmariadb-dev).
         .systemLibrary(
@@ -28,8 +39,7 @@ let package = Package(
         // own serial queue, woken by socket readiness (no thread ever blocks).
         .target(
             name: "MDBConnector",
-            dependencies: [
-                .product(name: "CMariaDB", package: "echo-libraries", condition: .when(platforms: [.macOS])),
+            dependencies: connectorProducts + [
                 .target(name: "CMariaDBSystem", condition: .when(platforms: [.linux])),
             ]
         ),
@@ -37,9 +47,8 @@ let package = Package(
             name: "MySQLKit",
             dependencies: [
                 "MDBConnector",
-                .product(name: "EchoTLS", package: "echo-libraries", condition: .when(platforms: [.macOS])),
                 .product(name: "Logging", package: "swift-log"),
-            ]
+            ] + tlsProducts
         ),
         .target(
             name: "MySQLKitTesting",
