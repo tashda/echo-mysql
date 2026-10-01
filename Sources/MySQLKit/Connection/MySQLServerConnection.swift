@@ -29,29 +29,41 @@ public actor MySQLServerConnection: Sendable {
     }
 
     public func primary() async throws -> any MySQLConnectionSession {
-        if let primaryConnection {
-            return primaryConnection
-        }
-        let connection = try await connectionFactory(configuration, logger)
-        primaryConnection = connection
-        return connection
+        try await shared(.primary)
     }
 
     public func metadata() async throws -> any MySQLConnectionSession {
-        if let metadataConnection {
-            return metadataConnection
-        }
-        let connection = try await connectionFactory(configuration, logger)
-        metadataConnection = connection
-        return connection
+        try await shared(.metadata)
     }
 
     public func activity() async throws -> any MySQLConnectionSession {
-        if let activityConnection {
-            return activityConnection
+        try await shared(.activity)
+    }
+
+    private enum Role { case primary, metadata, activity }
+    /// Connections being opened, so callers arriving meanwhile wait for the same one.
+    private var opening: [Role: Task<any MySQLConnectionSession, any Error>] = [:]
+
+    /// The role's connection, opened once. The actor lets other calls in while one awaits the
+    /// connect; without `opening`, two of them each opened a connection and the first, replaced,
+    /// was never closed.
+    private func shared(_ role: Role) async throws -> any MySQLConnectionSession {
+        switch role {
+        case .primary: if let primaryConnection { return primaryConnection }
+        case .metadata: if let metadataConnection { return metadataConnection }
+        case .activity: if let activityConnection { return activityConnection }
         }
-        let connection = try await connectionFactory(configuration, logger)
-        activityConnection = connection
+        if let pending = opening[role] { return try await pending.value }
+        let factory = connectionFactory, configuration = configuration, logger = logger
+        let task = Task { try await factory(configuration, logger) }
+        opening[role] = task
+        defer { opening[role] = nil }
+        let connection = try await task.value
+        switch role {
+        case .primary: primaryConnection = connection
+        case .metadata: metadataConnection = connection
+        case .activity: activityConnection = connection
+        }
         return connection
     }
 
