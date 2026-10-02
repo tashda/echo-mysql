@@ -31,7 +31,7 @@ struct TLSTests {
         """
 
     static func unrelatedCAFile() throws -> String {
-        let path = FileManager.default.temporaryDirectory.appendingPathComponent("mysql-wire-unrelated-ca.pem").path
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("echo-mysql-unrelated-ca.pem").path
         try unrelatedCA.write(toFile: path, atomically: true, encoding: .utf8)
         return path
     }

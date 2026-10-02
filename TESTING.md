@@ -124,7 +124,7 @@ and `parsec` logins. `caching_sha2_password` full authentication without TLS is 
 
 ## CI
 
-`.github/workflows/test.yml`: build and unit tests (Swift 6.2), then integration tests against GitHub
+`.github/workflows/ci.yml`: build and unit tests (Swift 6.2), then integration tests against GitHub
 service containers for MySQL 8.4 and 9 and MariaDB 10.11, 11.4 and 11.8, and one job each for TLS
 (MySQL 8.4, MariaDB 11.8), replication (MySQL 8.4, MariaDB 11.8) and network faults, set up exactly
 as above. Every job sets `MYSQL_TEST_REQUIRED=1`.

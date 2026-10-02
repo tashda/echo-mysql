@@ -91,7 +91,7 @@ public struct TestServer: Sendable {
     }
 
     /// A client for this server (or `configuration`). The caller closes it.
-    public func client(_ configuration: MySQLConfiguration? = nil, label: String = "mysql-wire.tests") -> MySQLClient {
+    public func client(_ configuration: MySQLConfiguration? = nil, label: String = "echo-mysql.tests") -> MySQLClient {
         MySQLClient(configuration: configuration ?? self.configuration, logger: Logger(label: label))
     }
 

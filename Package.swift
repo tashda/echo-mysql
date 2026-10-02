@@ -27,6 +27,7 @@ let package = Package(
         // MariaDB Connector/C (macOS: the universal framework built by echo-libraries; Linux: the
         // system's libmariadb), and on macOS the Keychain trust and client certificates (EchoTLS).
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.5"),
     ] + echoLibraries,
     targets: [
         // The system's MariaDB Connector/C on Linux (libmariadb-dev).

@@ -1,4 +1,4 @@
-name: "Developer Workflow: Build & Test"
+name: CI
 
 # Unit tests need no server. Integration tests find their server through one URL variable each
 # (MYSQL_TEST_URL, MYSQL_TEST_TLS_URL, MYSQL_TEST_REPLICA_URL, MYSQL_TEST_PROXY_URL; see TESTING.md);
@@ -7,8 +7,9 @@ name: "Developer Workflow: Build & Test"
 
 on:
   push:
+    branches: ["dev", "main"]
   pull_request:
-    branches: ["main", "dev"]
+    branches: ["dev", "main"]
   workflow_dispatch:
 
 concurrency:
