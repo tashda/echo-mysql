@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLMetadataClient {
     func listEvents(in schema: String? = nil) async throws -> [MySQLEventInfo] {
@@ -21,20 +20,20 @@ public extension MySQLMetadataClient {
         let result = try await connection.query(sql, binds: [MySQLData(string: schemaName)])
         return result.rows.compactMap { row in
             guard
-                let schema = row.column("event_schema")?.string,
-                let name = row.column("event_name")?.string
+                let schema = row.field("event_schema")?.string,
+                let name = row.field("event_name")?.string
             else { return nil }
 
-            let intervalValue = row.column("interval_value")?.string
-            let intervalField = row.column("interval_field")?.string
+            let intervalValue = row.field("interval_value")?.string
+            let intervalField = row.field("interval_field")?.string
             let schedule = [intervalValue, intervalField].compactMap { $0 }.joined(separator: " ")
 
             return MySQLEventInfo(
                 schema: schema,
                 name: name,
-                status: row.column("status")?.string,
+                status: row.field("status")?.string,
                 schedule: schedule.isEmpty ? nil : schedule,
-                definition: row.column("event_definition")?.string
+                definition: row.field("event_definition")?.string
             )
         }
     }

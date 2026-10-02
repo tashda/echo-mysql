@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLMetadataClient {
     /// Returns size, charset, and collation info for a database schema.
@@ -21,9 +20,9 @@ public extension MySQLMetadataClient {
         }
 
         return MySQLDatabaseInfo(
-            sizeMB: row.column("size_mb")?.string.flatMap(Double.init) ?? 0,
-            characterSet: row.column("charset")?.string,
-            collation: row.column("collation")?.string
+            sizeMB: row.field("size_mb")?.string.flatMap(Double.init) ?? 0,
+            characterSet: row.field("charset")?.string,
+            collation: row.field("collation")?.string
         )
     }
 
@@ -54,19 +53,19 @@ public extension MySQLMetadataClient {
 
         for row in result.rows {
             guard
-                let name = row.column("table_name")?.string,
-                let tableType = row.column("table_type")?.string
+                let name = row.field("table_name")?.string,
+                let tableType = row.field("table_type")?.string
             else { continue }
 
             let kind = MySQLSchemaObjectKind(tableType: tableType) ?? .table
             var entry = grouped[name] ?? (kind: kind, columns: [])
 
-            if let columnName = row.column("column_name")?.string {
-                let dataType = row.column("data_type")?.string ?? ""
-                let nullable = row.column("is_nullable")?.string
-                let columnKey = row.column("column_key")?.string
-                let length = row.column("character_maximum_length")?.string.flatMap(Int.init)
-                let position = row.column("ordinal_position")?.string.flatMap(Int.init) ?? 0
+            if let columnName = row.field("column_name")?.string {
+                let dataType = row.field("data_type")?.string ?? ""
+                let nullable = row.field("is_nullable")?.string
+                let columnKey = row.field("column_key")?.string
+                let length = row.field("character_maximum_length")?.string.flatMap(Int.init)
+                let position = row.field("ordinal_position")?.string.flatMap(Int.init) ?? 0
 
                 entry.columns.append(MySQLSchemaObjectColumnInfo(
                     name: columnName,

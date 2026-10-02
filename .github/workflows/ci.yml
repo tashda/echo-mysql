@@ -1,0 +1,222 @@
+name: CI
+
+# Unit tests need no server. Integration tests find their server through one URL variable each
+# (MYSQL_TEST_URL, MYSQL_TEST_TLS_URL, MYSQL_TEST_REPLICA_URL, MYSQL_TEST_PROXY_URL; see TESTING.md);
+# MYSQL_TEST_REQUIRED=1 makes a missing server a failure, so no job can pass by skipping.
+# Test-Password1 is the throwaway root password of the job's own containers.
+
+on:
+  push:
+    branches: ["dev", "main"]
+  pull_request:
+    branches: ["dev", "main"]
+  workflow_dispatch:
+
+concurrency:
+  # One group per pull request (a new push cancels its older run) and one per pushed commit, so
+  # every commit on dev is checked.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: "Build (Swift 6.2)"
+    runs-on: ubuntu-latest
+    container: swift:6.2-noble
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: apt-get update -qq && apt-get install -y -qq libmariadb-dev pkg-config
+      - name: Build library
+        run: swift build
+      - name: Build tests
+        run: swift build --build-tests
+
+  unit-tests:
+    name: "Unit tests"
+    needs: build
+    runs-on: ubuntu-latest
+    container: swift:6.2-noble
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: apt-get update -qq && apt-get install -y -qq libmariadb-dev pkg-config
+      - name: Run unit tests
+        run: swift test --skip MySQLIntegrationTests
+
+  integration:
+    name: "Integration - ${{ matrix.name }}"
+    needs: build
+    runs-on: ubuntu-latest
+    container: swift:6.2-noble
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "MySQL 8.4 LTS"
+            image: "mysql:8.4"
+            ping: "mysqladmin"
+          - name: "MySQL 9"
+            image: "mysql:9"
+            ping: "mysqladmin"
+          - name: "MariaDB 10.11 LTS"
+            image: "mariadb:10.11"
+            ping: "mariadb-admin"
+          - name: "MariaDB 11.4 LTS"
+            image: "mariadb:11.4"
+            ping: "mariadb-admin"
+          - name: "MariaDB 11.8 LTS"
+            image: "mariadb:11.8"
+            ping: "mariadb-admin"
+    services:
+      db:
+        image: ${{ matrix.image }}
+        env:
+          MYSQL_ROOT_PASSWORD: Test-Password1
+        # The TCP ping answers only once initialisation is over (the setup server has no networking).
+        options: >-
+          --health-cmd "${{ matrix.ping }} ping -h 127.0.0.1 -uroot -pTest-Password1 --silent"
+          --health-interval 5s --health-timeout 5s --health-retries 60
+    env:
+      # PREFERRED: MySQL 8.4+ and MariaDB 11.4+ generate a certificate and encrypt; MariaDB 10.11 has none.
+      MYSQL_TEST_URL: "mysql://root:Test-Password1@db:3306/?ssl-mode=PREFERRED"
+      MYSQL_TEST_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: apt-get update -qq && apt-get install -y -qq libmariadb-dev pkg-config
+      - name: Run integration tests against ${{ matrix.name }}
+        # Serially: on Linux, with every suite in parallel, about one connect in a thousand stalled
+        # before the server's greeting (TESTING.md, known issues). Serial runs take ~10 seconds.
+        run: swift test --no-parallel --filter 'MySQLIntegrationTests|TestServerTraitTests' --skip TLSTests --skip ReplicationTests --skip FaultTests
+
+  tls:
+    name: "TLS - ${{ matrix.name }}"
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "MySQL 8.4", image: "mysql:8.4", ping: "mysqladmin" }
+          - { name: "MariaDB 11.8", image: "mariadb:11.8", ping: "mariadb-admin" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: sudo apt-get -o DPkg::Lock::Timeout=300 update -qq && sudo apt-get -o DPkg::Lock::Timeout=300 install -y -qq libmariadb-dev pkg-config
+      - name: Swift
+        run: swift --version
+      - name: Certificates (a private CA, a server certificate for localhost, a client certificate)
+        run: |
+          mkdir -p "$RUNNER_TEMP/certs" && cd "$RUNNER_TEMP/certs"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=echo-mysql test CA" -keyout ca.key -out ca.pem
+          openssl req -newkey rsa:2048 -nodes -subj "/CN=localhost" -keyout server.key -out server.csr
+          printf "subjectAltName=DNS:localhost,IP:127.0.0.1\n" > server.ext
+          openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 30 -extfile server.ext -out server.pem
+          openssl req -newkey rsa:2048 -nodes -subj "/CN=echo-mysql test client" -keyout client.key -out client.csr
+          openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 30 -out client.pem
+          chmod 644 ./*.pem ./*.key
+      - name: Start ${{ matrix.name }} requiring TLS
+        run: |
+          docker run -d --name tls -p 3306:3306 -v "$RUNNER_TEMP/certs:/certs:ro" -e MYSQL_ROOT_PASSWORD="Test-Password1" ${{ matrix.image }} \
+            --require-secure-transport=ON --ssl-ca=/certs/ca.pem --ssl-cert=/certs/server.pem --ssl-key=/certs/server.key
+          for _ in $(seq 1 90); do
+            docker exec tls ${{ matrix.ping }} ping -h 127.0.0.1 -uroot -p"Test-Password1" --silent >/dev/null 2>&1 && break
+            sleep 2
+          done
+      - name: Run TLS tests
+        env:
+          MYSQL_TEST_REQUIRED: "1"
+        run: |
+          export MYSQL_TEST_TLS_URL="mysql://root:Test-Password1@127.0.0.1:3306/?ssl-mode=VERIFY_IDENTITY&ssl-ca=$RUNNER_TEMP/certs/ca.pem&ssl-cert=$RUNNER_TEMP/certs/client.pem&ssl-key=$RUNNER_TEMP/certs/client.key"
+          swift test --filter TLSTests
+      - name: Server log on failure
+        if: failure()
+        run: docker logs --tail 50 tls
+
+  replication:
+    name: "Replication - ${{ matrix.name }}"
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "MySQL 8.4"
+            image: "mysql:8.4"
+            client: "mysql"
+            ping: "mysqladmin"
+            options: "--log-bin=binlog --gtid-mode=ON --enforce-gtid-consistency=ON"
+            follow: "CHANGE REPLICATION SOURCE TO SOURCE_HOST='source', SOURCE_USER='root', SOURCE_PASSWORD='Test-Password1', SOURCE_AUTO_POSITION=1, GET_SOURCE_PUBLIC_KEY=1; START REPLICA; SET GLOBAL super_read_only=ON;"
+          - name: "MariaDB 11.8"
+            image: "mariadb:11.8"
+            client: "mariadb"
+            ping: "mariadb-admin"
+            options: "--log-bin=binlog"
+            follow: "CHANGE MASTER TO MASTER_HOST='source', MASTER_USER='root', MASTER_PASSWORD='Test-Password1', MASTER_USE_GTID=slave_pos; START SLAVE; SET GLOBAL read_only=ON;"
+    steps:
+      - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: sudo apt-get -o DPkg::Lock::Timeout=300 update -qq && sudo apt-get -o DPkg::Lock::Timeout=300 install -y -qq libmariadb-dev pkg-config
+      - name: Swift
+        run: swift --version
+      - name: Start a source and a replica following it
+        run: |
+          docker network create replication
+          docker run -d --name source --network replication -p 3306:3306 -e MYSQL_ROOT_PASSWORD="Test-Password1" ${{ matrix.image }} --server-id=1 ${{ matrix.options }}
+          docker run -d --name replica --network replication -p 3307:3306 -e MYSQL_ROOT_PASSWORD="Test-Password1" ${{ matrix.image }} --server-id=2 ${{ matrix.options }}
+          for server in source replica; do
+            for _ in $(seq 1 90); do
+              docker exec $server ${{ matrix.ping }} ping -h 127.0.0.1 -uroot -p"Test-Password1" --silent >/dev/null 2>&1 && break
+              sleep 2
+            done
+          done
+          docker exec replica ${{ matrix.client }} -uroot -p"Test-Password1" -e "${{ matrix.follow }}"
+      - name: Run replication tests
+        env:
+          MYSQL_TEST_REQUIRED: "1"
+        run: |
+          export MYSQL_TEST_URL="mysql://root:Test-Password1@127.0.0.1:3306/"
+          export MYSQL_TEST_REPLICA_URL="mysql://root:Test-Password1@127.0.0.1:3307/"
+          swift test --filter ReplicationTests
+      - name: Server logs on failure
+        if: failure()
+        run: for server in source replica; do docker logs --tail 30 $server; done
+
+  faults:
+    name: "Network faults (Toxiproxy)"
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: MariaDB Connector/C (system library on Linux)
+        run: sudo apt-get -o DPkg::Lock::Timeout=300 update -qq && sudo apt-get -o DPkg::Lock::Timeout=300 install -y -qq libmariadb-dev pkg-config
+      - name: Swift
+        run: swift --version
+      - name: Start MySQL 8.4 behind Toxiproxy
+        run: |
+          docker network create faults
+          docker run -d --name mysql --network faults -e MYSQL_ROOT_PASSWORD="Test-Password1" mysql:8.4
+          docker run -d --name toxiproxy --network faults -p 8474:8474 -p 3307:3307 ghcr.io/shopify/toxiproxy:2.12.0
+          for _ in $(seq 1 90); do
+            docker exec mysql mysqladmin ping -h 127.0.0.1 -uroot -p"Test-Password1" --silent >/dev/null 2>&1 && break
+            sleep 2
+          done
+          for _ in $(seq 1 30); do curl -sf http://127.0.0.1:8474/version >/dev/null && break; sleep 1; done
+          curl -sf -X POST http://127.0.0.1:8474/proxies -d '{"name":"mysql","listen":"0.0.0.0:3307","upstream":"mysql:3306"}'
+      - name: Run fault tests
+        env:
+          MYSQL_TEST_REQUIRED: "1"
+          MYSQL_TEST_PROXY_CONTROL: "http://127.0.0.1:8474"
+        run: |
+          export MYSQL_TEST_PROXY_URL="mysql://root:Test-Password1@127.0.0.1:3307/"
+          swift test --filter FaultTests
+      - name: Server log on failure
+        if: failure()
+        run: docker logs --tail 50 mysql

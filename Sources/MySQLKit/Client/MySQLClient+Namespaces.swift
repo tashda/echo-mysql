@@ -1,8 +1,4 @@
 public extension MySQLClient {
-    var query: MySQLQueryClient {
-        MySQLQueryClient(serverConnection: serverConnection)
-    }
-
     var bulk: MySQLBulkOperationClient {
         MySQLBulkOperationClient(serverConnection: serverConnection)
     }
@@ -33,5 +29,57 @@ public extension MySQLClient {
 
     var replication: MySQLReplicationClient {
         MySQLReplicationClient(serverConnection: serverConnection)
+    }
+
+    var maintenance: MySQLMaintenanceClient {
+        MySQLMaintenanceClient(serverConnection: serverConnection)
+    }
+
+    var indexes: MySQLIndexClient {
+        MySQLIndexClient(serverConnection: serverConnection)
+    }
+
+    var views: MySQLViewClient {
+        MySQLViewClient(serverConnection: serverConnection)
+    }
+
+    var routines: MySQLRoutineClient {
+        MySQLRoutineClient(serverConnection: serverConnection)
+    }
+
+    var triggers: MySQLTriggerClient {
+        MySQLTriggerClient(serverConnection: serverConnection)
+    }
+
+    var events: MySQLEventClient {
+        MySQLEventClient(serverConnection: serverConnection)
+    }
+
+    var serverConfig: MySQLServerConfigClient {
+        MySQLServerConfigClient(serverConnection: serverConnection)
+    }
+
+    var backupRestore: MySQLBackupRestoreClient {
+        MySQLBackupRestoreClient(serverConnection: serverConnection)
+    }
+
+    var errorLog: MySQLErrorLogClient {
+        MySQLErrorLogClient(serverConnection: serverConnection)
+    }
+
+    var constraints: MySQLConstraintClient {
+        MySQLConstraintClient(serverConnection: serverConnection)
+    }
+
+    var scripts: MySQLScriptClient {
+        MySQLScriptClient(serverConnection: serverConnection)
+    }
+
+    var executionPlan: MySQLExecutionPlanClient {
+        MySQLExecutionPlanClient(serverConnection: serverConnection)
+    }
+
+    var transactions: MySQLTransactionClient {
+        MySQLTransactionClient(serverConnection: serverConnection)
     }
 }

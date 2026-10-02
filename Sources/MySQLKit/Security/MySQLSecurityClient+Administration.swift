@@ -1,5 +1,4 @@
 import Foundation
-import MySQLWire
 
 public extension MySQLSecurityClient {
     func accountLimits(for username: String, host: String) async throws -> MySQLAccountLimits? {
@@ -24,10 +23,10 @@ public extension MySQLSecurityClient {
         }
 
         return MySQLAccountLimits(
-            maxQueriesPerHour: row.column("max_questions")?.string.flatMap(Int.init) ?? 0,
-            maxUpdatesPerHour: row.column("max_updates")?.string.flatMap(Int.init) ?? 0,
-            maxConnectionsPerHour: row.column("max_connections")?.string.flatMap(Int.init) ?? 0,
-            maxUserConnections: row.column("max_user_connections")?.string.flatMap(Int.init) ?? 0
+            maxQueriesPerHour: row.field("max_questions")?.string.flatMap(Int.init) ?? 0,
+            maxUpdatesPerHour: row.field("max_updates")?.string.flatMap(Int.init) ?? 0,
+            maxConnectionsPerHour: row.field("max_connections")?.string.flatMap(Int.init) ?? 0,
+            maxUserConnections: row.field("max_user_connections")?.string.flatMap(Int.init) ?? 0
         )
     }
 
@@ -36,6 +35,7 @@ public extension MySQLSecurityClient {
         host: String,
         limits: MySQLAccountLimits
     ) async throws -> MySQLUserMutationResult {
+        let escapedLiteral = try await literalEscaper(for: [username, host])
         let statement = """
         ALTER USER '\(escapedLiteral(username))'@'\(escapedLiteral(host))' WITH \
         MAX_QUERIES_PER_HOUR \(limits.maxQueriesPerHour) \

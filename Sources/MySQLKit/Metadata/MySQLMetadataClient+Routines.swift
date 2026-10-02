@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLMetadataClient {
     func listRoutines(in schema: String? = nil) async throws -> [MySQLRoutineInfo] {
@@ -19,16 +18,16 @@ public extension MySQLMetadataClient {
         let result = try await connection.query(sql, binds: [MySQLData(string: schemaName)])
         return result.rows.compactMap { row in
             guard
-                let schema = row.column("routine_schema")?.string,
-                let name = row.column("routine_name")?.string,
-                let type = row.column("routine_type")?.string
+                let schema = row.field("routine_schema")?.string,
+                let name = row.field("routine_name")?.string,
+                let type = row.field("routine_type")?.string
             else { return nil }
 
             return MySQLRoutineInfo(
                 schema: schema,
                 name: name,
                 type: type,
-                definition: row.column("routine_definition")?.string
+                definition: row.field("routine_definition")?.string
             )
         }
     }

@@ -1,11 +1,11 @@
 import Foundation
-import MySQLWire
 
 public extension MySQLSessionClient {
     func currentUser() async throws -> String? {
         let connection = try await serverConnection.primary()
-        let rows = try await connection.simpleQuery("SELECT CURRENT_USER() AS current_user")
-        return rows.first?.column("current_user")?.string
+        // CURRENT_USER is a reserved word, so it cannot be the column's alias.
+        let rows = try await connection.simpleQuery("SELECT CURRENT_USER() AS account")
+        return rows.first?.field("account")?.string
     }
 
     func currentDatabase() async throws -> String? {
@@ -20,8 +20,8 @@ public extension MySQLSessionClient {
 
         return rows.compactMap { row -> MySQLSessionVariable? in
             guard
-                let name = row.column("Variable_name")?.string,
-                let value = row.column("Value")?.string
+                let name = row.field("Variable_name")?.string,
+                let value = row.field("Value")?.string
             else {
                 return nil
             }
@@ -36,9 +36,18 @@ public extension MySQLSessionClient {
     }
 
     func setSessionVariable(name: String, value: String?) async throws -> MySQLSessionVariable {
-        let renderedValue = value.map { "'\(MySQLBindRenderer.escapeStringLiteral($0))'" } ?? "DEFAULT"
+        // Numbers go unquoted: numeric variables refuse a string ("Incorrect argument type").
+        // Text is a parameter, escaped by the connection for its character set and sql_mode.
         let connection = try await serverConnection.primary()
-        _ = try await connection.simpleQuery("SET SESSION `\(escapedIdentifier(name))` = \(renderedValue)")
+        let statement = "SET SESSION `\(escapedIdentifier(name))` = "
+        switch value {
+        case let value? where Self.isNumericLiteral(value):
+            _ = try await connection.simpleQuery(statement + value)
+        case let value?:
+            _ = try await connection.query(statement + "?", binds: [MySQLData(string: value)])
+        case nil:
+            _ = try await connection.simpleQuery(statement + "DEFAULT")
+        }
         let resolvedValue = value ?? "DEFAULT"
         return MySQLSessionVariable(name: name, value: resolvedValue)
     }
@@ -53,18 +62,28 @@ public extension MySQLSessionClient {
 
     func transactionIsolationLevel() async throws -> MySQLTransactionIsolationLevel? {
         let connection = try await serverConnection.primary()
+        // transaction_isolation on MySQL and MariaDB 11.1+; tx_isolation on older MariaDB.
         let rows = try await connection.simpleQuery(
-            "SELECT @@SESSION.transaction_isolation AS transaction_isolation"
+            "SHOW SESSION VARIABLES WHERE Variable_name IN ('transaction_isolation', 'tx_isolation')"
         )
-        guard let rawLevel = rows.first?.column("transaction_isolation")?.string else {
+        let values = Dictionary(rows.compactMap { row in
+            row.field("Variable_name")?.string.map { ($0, row.field("Value")?.string) }
+        }, uniquingKeysWith: { first, _ in first })
+        guard let rawLevel = (values["transaction_isolation"] ?? values["tx_isolation"]) ?? nil else {
             return nil
         }
-        return MySQLTransactionIsolationLevel(rawValue: rawLevel.uppercased())
+        // The variable reads REPEATABLE-READ; the statement and the enum say REPEATABLE READ.
+        return MySQLTransactionIsolationLevel(rawValue: rawLevel.uppercased().replacingOccurrences(of: "-", with: " "))
     }
 
     func setTransactionIsolationLevel(_ level: MySQLTransactionIsolationLevel) async throws {
         let connection = try await serverConnection.primary()
         _ = try await connection.simpleQuery("SET SESSION TRANSACTION ISOLATION LEVEL \(level.rawValue)")
+    }
+
+    private static func isNumericLiteral(_ value: String) -> Bool {
+        !value.isEmpty && value.allSatisfy { $0.isASCII && ($0.isNumber || $0 == "." || $0 == "-") }
+            && Double(value) != nil
     }
 
     private func escapedIdentifier(_ value: String) -> String {

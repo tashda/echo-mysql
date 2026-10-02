@@ -1,5 +1,4 @@
 import Foundation
-import MySQLWire
 
 public extension MySQLMetadataClient {
     func tableStructure(for table: String, schema: String? = nil) async throws -> MySQLTableStructure {
@@ -35,6 +34,7 @@ public extension MySQLMetadataClient {
         JOIN information_schema.key_column_usage k
           ON k.constraint_name = t.constraint_name
          AND k.table_schema = t.table_schema
+         AND k.table_name = t.table_name
         WHERE t.table_schema = ?
           AND t.table_name = ?
           AND t.constraint_type = 'PRIMARY KEY'
@@ -50,8 +50,8 @@ public extension MySQLMetadataClient {
             return nil
         }
 
-        let name = firstRow.column("constraint_name")?.string ?? "PRIMARY"
-        let columns = result.rows.compactMap { $0.column("column_name")?.string }
+        let name = firstRow.field("constraint_name")?.string ?? "PRIMARY"
+        let columns = result.rows.compactMap { $0.field("column_name")?.string }
         return MySQLPrimaryKeyInfo(name: name, columns: columns)
     }
 
@@ -79,17 +79,17 @@ public extension MySQLMetadataClient {
         var indexTypes: [String: String] = [:]
         for row in result.rows {
             guard
-                let name = row.column("index_name")?.string,
-                let columnName = row.column("column_name")?.string
+                let name = row.field("index_name")?.string,
+                let columnName = row.field("column_name")?.string
             else {
                 continue
             }
 
-            let isUnique = row.column("non_unique")?.string == "0"
-            let position = row.column("seq_in_index")?.string.flatMap(Int.init) ?? 0
+            let isUnique = row.field("non_unique")?.string == "0"
+            let position = row.field("seq_in_index")?.string.flatMap(Int.init) ?? 0
             let sortOrder: MySQLIndexColumnInfo.SortOrder =
-                row.column("collation")?.string == "D" ? .descending : .ascending
-            let indexType = row.column("index_type")?.string
+                row.field("collation")?.string == "D" ? .descending : .ascending
+            let indexType = row.field("index_type")?.string
 
             var entry = grouped[name] ?? (true, [])
             entry.isUnique = entry.isUnique && isUnique
@@ -143,16 +143,16 @@ public extension MySQLMetadataClient {
 
         var grouped: [String: (columns: [String], referencedSchema: String, referencedTable: String, referencedColumns: [String], onUpdate: String?, onDelete: String?)] = [:]
         for row in result.rows {
-            guard let name = row.column("constraint_name")?.string else {
+            guard let name = row.field("constraint_name")?.string else {
                 continue
             }
 
-            let column = row.column("column_name")?.string
-            let referencedSchema = row.column("referenced_table_schema")?.string ?? schema
-            let referencedTable = row.column("referenced_table_name")?.string ?? ""
-            let referencedColumn = row.column("referenced_column_name")?.string
-            let onUpdate = row.column("update_rule")?.string
-            let onDelete = row.column("delete_rule")?.string
+            let column = row.field("column_name")?.string
+            let referencedSchema = row.field("referenced_table_schema")?.string ?? schema
+            let referencedTable = row.field("referenced_table_name")?.string ?? ""
+            let referencedColumn = row.field("referenced_column_name")?.string
+            let onUpdate = row.field("update_rule")?.string
+            let onDelete = row.field("delete_rule")?.string
 
             var entry = grouped[name] ?? ([], referencedSchema, referencedTable, [], onUpdate, onDelete)
             if let column {
@@ -206,15 +206,15 @@ public extension MySQLMetadataClient {
 
         var grouped: [String: MySQLDependencyInfo] = [:]
         for row in result.rows {
-            guard let name = row.column("constraint_name")?.string else {
+            guard let name = row.field("constraint_name")?.string else {
                 continue
             }
 
-            let baseColumn = row.column("column_name")?.string
-            let referencedTable = row.column("referenced_table_name")?.string ?? ""
-            let referencedColumn = row.column("referenced_column_name")?.string
-            let onUpdate = row.column("update_rule")?.string
-            let onDelete = row.column("delete_rule")?.string
+            let baseColumn = row.field("column_name")?.string
+            let referencedTable = row.field("referenced_table_name")?.string ?? ""
+            let referencedColumn = row.field("referenced_column_name")?.string
+            let onUpdate = row.field("update_rule")?.string
+            let onDelete = row.field("delete_rule")?.string
 
             var dependency = grouped[name] ?? MySQLDependencyInfo(
                 name: name,

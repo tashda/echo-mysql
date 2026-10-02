@@ -2,49 +2,76 @@
 
 import PackageDescription
 
+// echo-libraries ships Apple-only binary frameworks; on Linux SwiftPM must not even fetch it (its
+// binary download crashes there), so the dependency and its products exist on macOS only.
+#if os(macOS)
+let echoLibraries: [Package.Dependency] = [.package(url: "https://github.com/tashda/echo-libraries", from: "1.1.0")]
+let connectorProducts: [Target.Dependency] = [.product(name: "CMariaDB", package: "echo-libraries")]
+let tlsProducts: [Target.Dependency] = [.product(name: "EchoTLS", package: "echo-libraries")]
+#else
+let echoLibraries: [Package.Dependency] = []
+let connectorProducts: [Target.Dependency] = []
+let tlsProducts: [Target.Dependency] = []
+#endif
+
 let package = Package(
-    name: "mysql-wire",
+    name: "echo-mysql",
     platforms: [
-        .macOS(.v13),
-        .iOS(.v16)
+        .macOS(.v26),
     ],
     products: [
-        .library(name: "MySQLWire", targets: ["MySQLWire"]),
         .library(name: "MySQLKit", targets: ["MySQLKit"]),
         .library(name: "MySQLKitTesting", targets: ["MySQLKitTesting"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/vapor/mysql-nio.git", from: "1.9.1"),
+        // MariaDB Connector/C (macOS: the universal framework built by echo-libraries; Linux: the
+        // system's libmariadb), and on macOS the Keychain trust and client certificates (EchoTLS).
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
-    ],
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.5"),
+    ] + echoLibraries,
     targets: [
+        // The system's MariaDB Connector/C on Linux (libmariadb-dev).
+        .systemLibrary(
+            name: "CMariaDBSystem",
+            pkgConfig: "libmariadb",
+            providers: [.apt(["libmariadb-dev"]), .yum(["mariadb-connector-c-devel"])]
+        ),
+        // The transport: the only code that calls Connector/C. Each connection is an actor on its
+        // own serial queue, woken by socket readiness (no thread ever blocks).
         .target(
-            name: "MySQLWire",
-            dependencies: [
-                .product(name: "MySQLNIO", package: "mysql-nio"),
-                .product(name: "Logging", package: "swift-log"),
+            name: "MDBConnector",
+            dependencies: connectorProducts + [
+                .target(name: "CMariaDBSystem", condition: .when(platforms: [.linux])),
             ]
         ),
         .target(
             name: "MySQLKit",
             dependencies: [
-                "MySQLWire",
+                "MDBConnector",
                 .product(name: "Logging", package: "swift-log"),
-            ]
+            ] + tlsProducts
         ),
         .target(
             name: "MySQLKitTesting",
-            dependencies: ["MySQLKit"]
+            dependencies: [
+                "MySQLKit",
+                .product(name: "Logging", package: "swift-log"),
+            ]
         ),
         .testTarget(
-            name: "MySQLWireTests",
-            dependencies: ["MySQLWire"],
-            path: "Tests/MySQLWireTests"
+            name: "MDBConnectorTests",
+            dependencies: ["MDBConnector"]
         ),
         .testTarget(
             name: "MySQLKitTests",
             dependencies: ["MySQLKit", "MySQLKitTesting"],
             path: "Tests/MySQLKitTests"
+        ),
+        // Against a real server (Tests/with-lab.sh, or MYSQL_* in CI); skipped without one.
+        .testTarget(
+            name: "MySQLIntegrationTests",
+            dependencies: ["MySQLKit", "MySQLKitTesting"],
+            path: "Tests/MySQLIntegrationTests"
         ),
     ],
     swiftLanguageModes: [.v6]

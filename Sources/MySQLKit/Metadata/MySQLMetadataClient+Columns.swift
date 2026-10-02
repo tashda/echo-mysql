@@ -1,4 +1,3 @@
-import MySQLWire
 
 public extension MySQLMetadataClient {
     func listColumns(in table: String, schema: String? = nil) async throws -> [MySQLColumnInfo] {
@@ -36,19 +35,19 @@ public extension MySQLMetadataClient {
         )
         return result.rows.compactMap { row in
             guard
-                let name = row.column("column_name")?.string,
-                let dataType = row.column("data_type")?.string,
-                let nullable = row.column("is_nullable")?.string
+                let name = row.field("column_name")?.string,
+                let dataType = row.field("data_type")?.string,
+                let nullable = row.field("is_nullable")?.string
             else {
                 return nil
             }
 
-            let key = row.column("column_key")?.string
-            let maxLength = row.column("character_maximum_length")?.string.flatMap(Int.init)
-            let fullDataType = row.column("column_type")?.string ?? dataType
-            let generationExpression = row.column("generation_expression")?.string?.nilIfEmpty
-            let extra = row.column("extra")?.string?.lowercased() ?? ""
-            let ordinalPosition = row.column("ordinal_position")?.string.flatMap(Int.init) ?? 0
+            let key = row.field("column_key")?.string
+            let maxLength = row.field("character_maximum_length")?.string.flatMap(Int.init)
+            let fullDataType = row.field("column_type")?.string ?? dataType
+            let generationExpression = row.field("generation_expression")?.string?.nilIfEmpty
+            let extra = row.field("extra")?.string?.lowercased() ?? ""
+            let ordinalPosition = row.field("ordinal_position")?.string.flatMap(Int.init) ?? 0
 
             return MySQLColumnInfo(
                 name: name,
@@ -57,12 +56,12 @@ public extension MySQLMetadataClient {
                 isNullable: nullable.uppercased() != "NO",
                 isPrimaryKey: key == "PRI",
                 maxLength: maxLength,
-                defaultValue: row.column("column_default")?.string,
+                defaultValue: row.field("column_default")?.string,
                 generationExpression: generationExpression,
                 isAutoIncrement: extra.contains("auto_increment"),
-                collation: row.column("collation_name")?.string,
-                characterSet: row.column("character_set_name")?.string,
-                comment: row.column("column_comment")?.string?.nilIfEmpty,
+                collation: row.field("collation_name")?.string,
+                characterSet: row.field("character_set_name")?.string,
+                comment: row.field("column_comment")?.string?.nilIfEmpty,
                 ordinalPosition: ordinalPosition
             )
         }

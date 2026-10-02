@@ -1,24 +1,14 @@
-import MySQLWire
 
 public extension MySQLSecurityClient {
     func listUsers() async throws -> [MySQLUserAccount] {
-        let sql = """
-        SELECT
-            User,
-            Host,
-            plugin,
-            account_locked,
-            password_expired
-        FROM mysql.user
-        ORDER BY User, Host;
-        """
+        let sql = try await isMariaDB() ? Self.mariaDBUsersSQL : Self.mysqlUsersSQL
 
         let connection = try await serverConnection.metadata()
         let result = try await connection.query(sql, binds: [])
         return result.rows.compactMap { row in
             guard
-                let username = row.column("User")?.string,
-                let host = row.column("Host")?.string
+                let username = row.field("User")?.string,
+                let host = row.field("Host")?.string
             else {
                 return nil
             }
@@ -26,12 +16,29 @@ public extension MySQLSecurityClient {
             return MySQLUserAccount(
                 username: username,
                 host: host,
-                authenticationPlugin: row.column("plugin")?.string,
-                accountLocked: row.column("account_locked")?.string?.uppercased() == "Y",
-                passwordExpired: row.column("password_expired")?.string?.uppercased() == "Y"
+                authenticationPlugin: row.field("plugin")?.string,
+                accountLocked: row.field("account_locked")?.string?.uppercased() == "Y",
+                passwordExpired: row.field("password_expired")?.string?.uppercased() == "Y"
             )
         }
     }
+
+    internal static let mysqlUsersSQL = """
+        SELECT User, Host, plugin, account_locked, password_expired
+        FROM mysql.user
+        ORDER BY User, Host;
+        """
+
+    /// MariaDB 10.4+ keeps accounts in mysql.global_priv as JSON; its mysql.user view has no
+    /// account_locked column. JSON_VALUE gives a JSON true back as 1.
+    internal static let mariaDBUsersSQL = """
+        SELECT User, Host,
+            JSON_VALUE(Priv, '$.plugin') AS plugin,
+            IF(JSON_VALUE(Priv, '$.account_locked') IN ('true', '1'), 'Y', 'N') AS account_locked,
+            IF(JSON_VALUE(Priv, '$.password_last_changed') = '0', 'Y', 'N') AS password_expired
+        FROM mysql.global_priv
+        ORDER BY User, Host;
+        """
 
     func showGrants(for username: String, host: String) async throws -> [String] {
         let escapedUser = username.replacingOccurrences(of: "'", with: "''")

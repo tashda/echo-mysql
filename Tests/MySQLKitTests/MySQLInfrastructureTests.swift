@@ -1,7 +1,6 @@
 import Foundation
 import MySQLKit
 import MySQLKitTesting
-import MySQLWire
 import Testing
 
 struct MySQLInfrastructureTests {
@@ -54,20 +53,24 @@ struct MySQLInfrastructureTests {
         #expect(await serverConnection.cachedPreparedStatements().isEmpty)
     }
 
+    /// Callers that arrive while the connection is being opened wait for it instead of opening
+    /// their own (the replaced one was never closed).
     @Test
-    func testConfigurationBuildsFixtureConfiguration() {
-        let testConfiguration = MySQLTestConfiguration(
-            host: "db.internal",
-            port: 3307,
-            username: "echo",
-            password: "secret",
-            database: "sakila"
+    func concurrentCallersShareOneConnection() async throws {
+        actor Counter { var opened = 0; func open() { opened += 1 } }
+        let counter = Counter()
+        let serverConnection = MySQLServerConnection(
+            configuration: MySQLConfiguration(host: "localhost", username: "root"),
+            connectionFactory: { _, _ in
+                await counter.open()
+                try await Task.sleep(for: .milliseconds(50))
+                return MockConnectionSession()
+            }
         )
-
-        let fixture = MySQLFixture(configuration: testConfiguration.mysqlConfiguration)
-
-        #expect(fixture.configuration.host == "db.internal")
-        #expect(fixture.configuration.port == 3307)
-        #expect(fixture.configuration.database == "sakila")
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 1...5 { group.addTask { _ = try await serverConnection.metadata() } }
+            try await group.waitForAll()
+        }
+        #expect(await counter.opened == 1)
     }
 }
