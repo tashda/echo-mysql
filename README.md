@@ -1,4 +1,4 @@
-# mysql-wire
+# echo-mysql
 
 A typed MySQL and MariaDB client for Swift on **MariaDB Connector/C**. Echo uses it for every MySQL
 and MariaDB connection.
@@ -26,7 +26,7 @@ Linux (`libmariadb-dev`). It is LGPL-2.1, linked dynamically and unmodified.
 ## Usage
 
 ```swift
-.package(url: "https://github.com/tashda/mysql-wire.git", branch: "dev")
+.package(url: "https://github.com/tashda/echo-mysql.git", branch: "dev")
 ```
 
 ```swift

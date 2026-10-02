@@ -5,7 +5,7 @@ import Testing
 
 /// Connecting, queries, binds, streaming and what happens when a connection is lost.
 /// Linux runs on the system's Connector/C (Ubuntu's, with GnuTLS), which can't interrupt a statement
-/// over TLS or refuse a plaintext RSA key fetch (tashda/mysql-wire#3); Echo ships on macOS only.
+/// over TLS or refuse a plaintext RSA key fetch (tashda/echo-mysql#1); Echo ships on macOS only.
 #if os(Linux)
 let systemConnectorOnLinux = true
 #else
@@ -228,7 +228,7 @@ struct ConnectionTests {
 
     /// Echo's Force Stop: the statement ends at once, the open transaction is reported (and rolled
     /// back by the server), and the next call gets a new connection.
-    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/mysql-wire#3"))
+    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/echo-mysql#1"))
     func closeRunningConnectionStopsAStatementInATransaction() async throws {
         let server = try TestServer.require()
         try await server.withClient { client in
@@ -250,7 +250,7 @@ struct ConnectionTests {
     }
 
     /// A cancelled task ends its statement and its connection; the next call gets a new one.
-    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/mysql-wire#3"))
+    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/echo-mysql#1"))
     func cancellingARunningCallReplacesTheConnection() async throws {
         let server = try TestServer.require()
         try await server.withClient { client in
@@ -266,7 +266,7 @@ struct ConnectionTests {
 
     /// Decision D18: a `caching_sha2_password` full sign-in without TLS fails rather than fetch the
     /// server's RSA key in plaintext, and works with the key from a file the user chose.
-    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/mysql-wire#3"))
+    @Test(.disabled(if: systemConnectorOnLinux, "Ubuntu's GnuTLS Connector/C: tashda/echo-mysql#1"))
     func cachingSHA2WithoutTLSNeedsAKeyFile() async throws {
         let server = try TestServer.require()
         try await server.withClient { admin in

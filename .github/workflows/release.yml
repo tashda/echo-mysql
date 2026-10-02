@@ -41,8 +41,8 @@ jobs:
       - name: "Generating Release Notes"
         run: |
           python3 .github/scripts/generate_release_notes.py \
-            --repo-key mysql-wire \
-            --repo-name mysql-wire \
+            --repo-key echo-mysql \
+            --repo-name echo-mysql \
             --new-tag "${{ steps.version.outputs.tag }}" \
             --previous-tag "${{ steps.version.outputs.previous_tag }}" \
             --output release-notes.md

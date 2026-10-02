@@ -1,4 +1,4 @@
-# Testing mysql-wire
+# Testing echo-mysql
 
 ```bash
 swift test
@@ -9,7 +9,7 @@ MySQL or MariaDB server, which they find through one URL variable per setup. A s
 not set is skipped, and the skip names the variable. With `MYSQL_TEST_REQUIRED=1` a missing variable
 fails instead, which is how CI makes sure nothing passed by being skipped.
 
-Tests create the schemas, tables, users and roles they need through mysql-wire's typed APIs, under
+Tests create the schemas, tables, users and roles they need through echo-mysql's typed APIs, under
 names starting `mwt_`, and remove them afterwards. Any disposable server works: Docker, a VM, or
 echo-server-lab. Do not point the tests at a server whose data matters.
 
@@ -36,7 +36,7 @@ mysql://root:pass@host:3306/?ssl-mode=VERIFY_IDENTITY&ssl-ca=/ca.pem&ssl-cert=/c
 `ssl-mode` is `DISABLED`, `PREFERRED` (the default), `REQUIRED`, `VERIFY_CA` or `VERIFY_IDENTITY`.
 `connect-timeout` (seconds) is optional. `mariadb://` works too.
 
-MySQL 8+ signs `root` in with `caching_sha2_password`, whose first login mysql-wire can only complete
+MySQL 8+ signs `root` in with `caching_sha2_password`, whose first login echo-mysql can only complete
 over TLS. The official MySQL images generate a certificate, so `PREFERRED` works; so do MariaDB 11.4+
 images. MariaDB 10.x images have no certificate and use `mysql_native_password`, which needs none.
 

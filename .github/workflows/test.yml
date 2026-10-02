@@ -112,11 +112,11 @@ jobs:
       - name: Certificates (a private CA, a server certificate for localhost, a client certificate)
         run: |
           mkdir -p "$RUNNER_TEMP/certs" && cd "$RUNNER_TEMP/certs"
-          openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=mysql-wire test CA" -keyout ca.key -out ca.pem
+          openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=echo-mysql test CA" -keyout ca.key -out ca.pem
           openssl req -newkey rsa:2048 -nodes -subj "/CN=localhost" -keyout server.key -out server.csr
           printf "subjectAltName=DNS:localhost,IP:127.0.0.1\n" > server.ext
           openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 30 -extfile server.ext -out server.pem
-          openssl req -newkey rsa:2048 -nodes -subj "/CN=mysql-wire test client" -keyout client.key -out client.csr
+          openssl req -newkey rsa:2048 -nodes -subj "/CN=echo-mysql test client" -keyout client.key -out client.csr
           openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 30 -out client.pem
           chmod 644 ./*.pem ./*.key
       - name: Start ${{ matrix.name }} requiring TLS

@@ -15,7 +15,7 @@ let tlsProducts: [Target.Dependency] = []
 #endif
 
 let package = Package(
-    name: "mysql-wire",
+    name: "echo-mysql",
     platforms: [
         .macOS(.v26),
     ],

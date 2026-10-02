@@ -15,7 +15,7 @@ class Category:
 
 
 REPO_CATEGORIES: dict[str, list[Category]] = {
-    "mysql-wire": [
+    "echo-mysql": [
         Category("Wire Protocol", ("Sources/MySQLWire/", "Tests/MySQLWireTests/")),
         Category("Client APIs", ("Sources/MySQLKit/",)),
         Category("Testing & Fixtures", ("Sources/MySQLKitTesting/", "Tests/MySQLKitTests/")),
